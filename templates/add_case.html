@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>添加病例</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui27" />
+</head>
+<body class="detail-body">
+  <main class="kb-page narrow-page">
+    <a class="back-link" href="/knowledge">← 返回病例知识库</a>
+    <section class="add-case-card standalone-form">
+      <h1>添加病例</h1>
+      <p class="form-note">粘贴病例摘要，或上传病例文件/文件夹后由医生选择需要加入知识库的病例。新增数据会保存到本机持久化目录。</p>
+      <div class="add-grid">
+        <input id="addDiagnosis" placeholder="诊断/标题，如：男性尿道SCC" />
+        <input id="addAge" placeholder="年龄" />
+        <input id="addSex" placeholder="性别" />
+        <input id="addLs" placeholder="LS/硬化性苔藓状态" />
+        <input id="addCaseLabel" placeholder="自定义标签，默认：用户新增" />
+      </div>
+      <textarea id="addText" placeholder="粘贴病例摘要、病史、症状、影像、病理、免疫组化、治疗、随访等内容"></textarea>
+
+      <div class="case-image-upload-row image-row-priority">
+        <label class="folder-picker">
+          上传医学影像/病理图像
+          <input id="caseImages" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff,.dcm" multiple hidden />
+        </label>
+        <span id="caseImageStatus">可选：上传影像、病理切片截图或 DICOM 文件。</span>
+      </div>
+      <div id="caseImageList" class="case-image-list"></div>
+
+      <div class="case-file-section compact-case-file-section">
+        <div class="case-import-line two-column-line compact-upload-line">
+          <label class="folder-picker compact-picker">
+            上传病例文件
+            <input id="caseFile" type="file" accept=".xlsx,.xls,.csv,.docx,.pdf,.txt,.md" multiple hidden />
+          </label>
+          <button id="parseCaseFile" class="ghost-btn compact-action-btn" type="button">解析文件</button>
+        </div>
+        <div id="caseFileStatus" class="inline-status fine-upload-status">支持 PDF、DOCX、Excel、CSV、TXT、MD；可一次选择多个文件。解析过程中会在这里显示进度。</div>
+        <div id="caseBatchStatus" class="inline-status"></div>
+      </div>
+
+      <div class="form-actions vertical-actions">
+        <button id="submitCase" class="manual-save-btn">保存手动输入病例</button>
+        <a class="ghost-link back-to-kb" href="/knowledge">返回知识库</a>
+      </div>
+      <div id="addCaseStatus" class="inline-status"></div>
+    </section>
+  </main>
+
+  <div id="candidateModal" class="modal-backdrop" hidden>
+    <div class="modal-card candidate-modal-card">
+      <div class="modal-head">
+        <h3>选择需要加入知识库的病例</h3>
+        <button id="closeCandidateModal">×</button>
+      </div>
+      <p class="modal-tip">系统已从上传文件中识别候选病例。请勾选确认后加入知识库；表头和提示词行已尽量过滤。</p>
+      <div id="candidateModalList" class="candidate-modal-list"></div>
+      <div class="modal-actions">
+        <button id="addSelectedCandidates">加入选中病例</button>
+        <button id="selectAllCandidates" class="ghost">全选/取消</button>
+      </div>
+      <div id="candidateModalStatus" class="modal-status"></div>
+    </div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('addCaseStatus');
+    const imageStatus = document.getElementById('caseImageStatus');
+    const imageList = document.getElementById('caseImageList');
+    const caseFileStatus = document.getElementById('caseFileStatus');
+    const caseBatchStatus = document.getElementById('caseBatchStatus');
+    const candidateModal = document.getElementById('candidateModal');
+    const candidateModalList = document.getElementById('candidateModalList');
+    const candidateModalStatus = document.getElementById('candidateModalStatus');
+    let medicalImages = [];
+    let candidatePool = [];
+    let allSelected = false;
+    function escapeHtml(text){ return String(text ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;'); }
+    function renderImages(){
+      imageList.innerHTML = medicalImages.map((img, i) => `<div class="attachment-chip image-chip"><a href="${escapeHtml(img.url || '#')}" target="_blank">${escapeHtml(img.filename)}</a><button type="button" data-i="${i}">×</button></div>`).join('');
+      imageList.querySelectorAll('button').forEach(btn => btn.onclick = () => { medicalImages.splice(Number(btn.dataset.i), 1); renderImages(); });
+    }
+    function fillParsedFields(fields){
+      if (!fields) return;
+      if (fields.diagnosis || fields.free_text || fields.pathology) document.getElementById('addDiagnosis').value = fields.diagnosis || fields.pathology?.slice(0, 40) || document.getElementById('addDiagnosis').value;
+      if (fields.age) document.getElementById('addAge').value = fields.age;
+      if (fields.sex) document.getElementById('addSex').value = fields.sex;
+      if (fields.ls) document.getElementById('addLs').value = fields.ls;
+      const parts = [];
+      const labels = {history:'病史', prior_operation:'既往尿道操作/重建史', symptoms:'症状体征', tumor:'肿瘤情况', imaging:'影像/尿道镜', pathology:'病理', immuno:'免疫组化', tnm:'TNM/分期', grade:'分化程度', lymph_node:'淋巴结', surgery:'手术治疗', other_treatment:'其他治疗/用药', followup:'随访/转归', free_text:'原文摘要'};
+      for (const [k,label] of Object.entries(labels)) { if (fields[k]) parts.push(`【${label}】\n${fields[k]}`); }
+      if (parts.length) document.getElementById('addText').value = parts.join('\n\n');
+    }
+    async function autoSaveParsedCase(fields, sourceText=''){
+      const payload = { ...(fields || {}) };
+      const label = document.getElementById('addCaseLabel')?.value?.trim();
+      if (label) payload.case_label = label;
+      if (medicalImages.length) payload.medical_images = medicalImages;
+      if (sourceText && !payload.free_text) payload.free_text = sourceText;
+      const res = await fetch('/api/add_case', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fields: payload }) });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || '保存失败');
+      if (data.duplicate) {
+        alert(data.message || '检测到相同病例，已跳过重复保存。');
+      }
+      return data;
+    }
+    async function parseCaseFile(){
+      const files = Array.from(document.getElementById('caseFile').files || []);
+      if (!files.length) { caseFileStatus.textContent = '请选择病例文件。'; return; }
+      caseFileStatus.textContent = `正在解析 ${files.length} 个病例文件...`;
+      try {
+        if (files.length > 1) {
+          const fd = new FormData();
+          files.forEach(f => fd.append('files', f, f.name));
+          const res = await fetch('/api/upload_cases_batch', { method:'POST', body: fd });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || '批量识别失败');
+          caseFileStatus.textContent = data.message || `识别到 ${(data.candidates || []).length} 个候选病例。`;
+          showCandidateModal(data.candidates || []);
+          return;
+        }
+        const file = files[0];
+        const fd = new FormData(); fd.append('file', file);
+        const res = await fetch('/api/upload', { method:'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || data.note || '解析失败');
+        if (data.type === 'candidate_case_batch' && data.candidate_preview?.length) {
+          showCandidateModal(data.candidate_preview);
+          caseFileStatus.textContent = `识别到 ${data.candidate_count || data.candidate_preview.length} 个候选病例，请在弹窗中选择后保存。`;
+        } else {
+          const fields = data.fields || {};
+          fillParsedFields(fields);
+          const saved = await autoSaveParsedCase(fields, data.text || '');
+          caseFileStatus.innerHTML = `已解析并保存：<a href="/case/${encodeURIComponent(saved.case.case_id)}" target="_blank">${escapeHtml(saved.case.case_id)}</a>`;
+        }
+      } catch (err) { caseFileStatus.textContent = `解析/保存失败：${err.message}`; }
+      finally { document.getElementById('caseFile').value = ''; }
+    }
+    function candidateSummary(c){
+      return [c.name, c.age ? `${c.age}岁` : '', c.sex, c.diagnosis || c.pathology, c.tnm].filter(Boolean).join('｜') || c.display_title || '候选病例';
+    }
+    function showCandidateModal(candidates){
+      candidatePool = (candidates || []).filter(Boolean);
+      allSelected = false;
+      candidateModalList.innerHTML = candidatePool.map((c, i) => {
+        const desc = [c.history, c.symptoms, c.pathology, c.surgery, c.followup, c.free_text].filter(Boolean).join('；').slice(0, 180);
+        return `<label class="candidate-select-card"><input type="checkbox" data-i="${i}" /> <span><b>${escapeHtml(candidateSummary(c))}</b><small>${escapeHtml(c.source_file || '')}</small><small>${escapeHtml(desc || '暂无摘要')}</small></span></label>`;
+      }).join('') || '<div class="empty-card">没有识别到候选病例。</div>';
+      candidateModalStatus.textContent = `共识别 ${candidatePool.length} 个候选病例。`;
+      candidateModal.hidden = false;
+      document.body.classList.add('modal-open');
+    }
+    function closeCandidateModal(){ candidateModal.hidden = true; document.body.classList.remove('modal-open'); }
+    async function addSelectedCandidates(){
+      const selected = Array.from(candidateModalList.querySelectorAll('input[type="checkbox"]:checked')).map(x => candidatePool[Number(x.dataset.i)]).filter(Boolean);
+      if (!selected.length) { candidateModalStatus.textContent = '请先勾选至少一个候选病例。'; return; }
+      candidateModalStatus.textContent = '正在加入知识库...';
+      try {
+        const res = await fetch('/api/candidates/add_many', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ candidates: selected }) });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || '加入失败');
+        candidateModalStatus.textContent = data.message || '已加入。';
+        caseBatchStatus.textContent = data.message || '已加入选中病例。';
+      } catch (err) { candidateModalStatus.textContent = `加入失败：${err.message}`; }
+    }
+    async function uploadCaseImages(files){
+      for (const file of Array.from(files || [])) {
+        const fd = new FormData(); fd.append('file', file);
+        imageStatus.textContent = `正在上传：${file.name}`;
+        try {
+          const res = await fetch('/api/upload', { method:'POST', body: fd });
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || '上传失败');
+          medicalImages.push({ filename: data.filename, stored_as: data.stored_as, url: data.url, type: data.type, note: data.note || '' });
+          renderImages();
+          imageStatus.textContent = `已上传 ${medicalImages.length} 个图像文件。`;
+        } catch (err) { imageStatus.textContent = `上传失败：${err.message}`; }
+      }
+      document.getElementById('caseImages').value = '';
+    }
+    async function submitCase(){
+      const fields = {
+        diagnosis: document.getElementById('addDiagnosis').value,
+        age: document.getElementById('addAge').value,
+        sex: document.getElementById('addSex').value,
+        ls: document.getElementById('addLs').value,
+        free_text: document.getElementById('addText').value,
+        history: document.getElementById('addText').value,
+        medical_images: medicalImages,
+        case_label: document.getElementById('addCaseLabel').value,
+      };
+      statusEl.textContent = '正在加入...';
+      const res = await fetch('/api/add_case', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ fields }) });
+      const data = await res.json();
+      if (!res.ok || !data.ok) { statusEl.textContent = data.error || '添加失败'; return; }
+      if (data.duplicate) alert(data.message || '检测到相同病例，已跳过重复保存。');
+      statusEl.innerHTML = `${data.message}　<a href="/case/${encodeURIComponent(data.case.case_id)}">查看详情</a>`;
+      document.getElementById('addDiagnosis').value = '';
+      document.getElementById('addAge').value = '';
+      document.getElementById('addSex').value = '';
+      document.getElementById('addLs').value = '';
+      document.getElementById('addText').value = '';
+      document.getElementById('addCaseLabel').value = '';
+      medicalImages = []; renderImages();
+      imageStatus.textContent = '可选：上传影像、病理切片截图或 DICOM 文件。';
+    }
+    document.getElementById('caseImages').addEventListener('change', e => uploadCaseImages(e.target.files));
+    document.getElementById('parseCaseFile').addEventListener('click', parseCaseFile);
+    document.getElementById('submitCase').addEventListener('click', submitCase);
+    document.getElementById('closeCandidateModal').addEventListener('click', closeCandidateModal);
+    candidateModal.addEventListener('click', e => { if (e.target === candidateModal) closeCandidateModal(); });
+    document.getElementById('addSelectedCandidates').addEventListener('click', addSelectedCandidates);
+    document.getElementById('selectAllCandidates').addEventListener('click', () => { allSelected = !allSelected; candidateModalList.querySelectorAll('input[type="checkbox"]').forEach(x => x.checked = allSelected); });
+  </script>
+</body>
+</html>

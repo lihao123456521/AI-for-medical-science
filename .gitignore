@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# Runtime data and uploads may contain sensitive medical information.
+uploads/*
+!uploads/.gitkeep
+.uscc_scc_flask_data/
+data/private/
+data/raw/
+data/*original*
+data/*private*
+data/user_cases.json
+data/deleted_cases.json
+data/articles.json
+data/api_config.json
+data/api_config_history.json
+

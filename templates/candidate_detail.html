@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>候选病例确认</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui25" />
+</head>
+<body class="detail-body">
+  <main class="case-detail">
+    <a class="back-link" href="/">← 返回对话</a>
+    <article class="detail-card">
+      <div class="detail-head">
+        <div>
+          <h1>{{ candidate.display_title or candidate.candidate_id }}</h1>
+          <p>{{ candidate.source_file }}</p>
+        </div>
+        <span class="detail-badge">候选病例</span>
+      </div>
+      <div class="case-grid">
+        {% for key, label in [('name','姓名'),('sex','性别'),('age','年龄'),('diagnosis','诊断'),('ls','LS'),('tnm','TNM'),('lymph_node','淋巴结'),('history','病史'),('symptoms','症状'),('tumor','肿瘤'),('imaging','影像'),('pathology','病理'),('surgery','手术'),('other_treatment','其他治疗'),('followup','随访/转归'),('free_text','原始行信息')] %}
+          {% if candidate.get(key) %}
+          <section class="case-field">
+            <b>{{ label }}</b>
+            <p>{{ candidate.get(key) }}</p>
+          </section>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <div class="detail-actions">
+        <button id="confirmCandidateBtn" class="kb-action-btn">确认并加入病例知识库</button>
+        <span id="candidateStatus"></span>
+      </div>
+    </article>
+  </main>
+  <script>
+    const candidate = {{ candidate|tojson }};
+    document.getElementById('confirmCandidateBtn').onclick = async () => {
+      if (!confirm('确认将该候选病例加入病例知识库？')) return;
+      const res = await fetch('/api/candidate/add', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({candidate})});
+      const data = await res.json();
+      document.getElementById('candidateStatus').textContent = data.message || data.error || '已处理';
+    };
+  </script>
+</body>
+</html>

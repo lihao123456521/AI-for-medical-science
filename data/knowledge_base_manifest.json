@@ -1,0 +1,14 @@
+{
+  "data_classification": "PUBLIC SYNTHETIC DEMO DATA ONLY",
+  "source": "Generated synthetic records for public software demonstration",
+  "default_database_file": "data/knowledge_base.xlsx",
+  "summary": {
+    "total_cases": 12,
+    "sheets": {
+      "合成演示病例": 12
+    },
+    "synthetic_cases": 12,
+    "real_patient_records": 0
+  },
+  "compliance_note": "Do not commit real patient data, protected health information, API keys, or runtime uploads."
+}

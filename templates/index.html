@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>USCC 病例问答</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui34" />
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-block">
+        <div class="logo-mark">US</div>
+        <div>
+          <h1>USCC Chat</h1>
+          <p>病例问答 · 知识库检索</p>
+        </div>
+      </div>
+
+      <button class="api-key-btn" id="apiKeyBtn">⚙ API Key 配置</button>
+      <button class="api-key-btn secondary" id="fontSettingsBtn">字体设置</button>
+      <button class="new-chat-btn" id="newChatBtn">+ 新建对话</button>
+      <button class="new-chat-btn secondary" id="addCurrentCaseBtn">+ 添加当前病例</button>
+      <a class="kb-entry" href="/knowledge">
+        <b>病例知识库</b>
+        <span id="kbSummary">正在读取...</span>
+      </a>
+
+      <section class="history-panel">
+        <div class="panel-title">聊天记录</div>
+        <div id="historyList" class="history-list"></div>
+      </section>
+    </aside>
+
+    <section class="chat-layout">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenuBtn">☰</button>
+        <div class="topbar-mascot" aria-hidden="true">
+          <img class="mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="项目头像" />
+        </div>
+        <div>
+          <h2>病例问答</h2>
+          <p>输入病例或提问，自动匹配相似案例。</p>
+        </div>
+      </header>
+
+      <div class="chat-window" id="chatWindow">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-mascot"><img class="mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="项目头像" /></div>
+          <h3>开始病例讨论</h3>
+          <p>粘贴病例摘要、检查结果或上传文件。需要保存时输入“投喂进入数据库”。</p>
+          <div class="quick-prompts">
+            <button data-prompt="请检索有借鉴价值的相似病例，并整理治疗与随访对照：">相似病例</button>
+            <button data-prompt="请根据当前病例整理病例讨论摘要：">病例摘要</button>
+            <button data-prompt="请比较相似病例的手术和用药路径：">治疗对照</button>
+          </div>
+        </div>
+      </div>
+
+      <footer class="composer-wrap">
+        <div id="uploadStatus" class="upload-status-inline"></div>
+        <div class="composer">
+          <label class="attach-btn" for="fileInput" title="上传病例文件、影像或病理图片">＋</label>
+          <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff,.dcm,.pdf,.xlsx,.xls,.csv,.docx,.txt,.md" hidden />
+          <textarea id="messageInput" rows="1" placeholder="输入病例、检查结果或医生问题"></textarea>
+          <button id="sendBtn" title="发送">发送</button>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="apiModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>API Key 配置</h3>
+        <button id="closeApiModal">×</button>
+      </div>
+      <p class="modal-tip">配置会记忆在浏览器和本地 Flask 后端中，可在下次打开网页时一键调用。支持 OpenAI、Claude/Anthropic，以及常见 OpenAI-compatible 接口。保存时会主动测试真实连接。</p>
+      <label class="form-label">API 供应商</label>
+      <select id="apiProviderSelect" class="modal-input">
+        <option value="openai">OpenAI</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="dashscope">阿里云百炼 / 通义千问 DashScope</option>
+        <option value="zhipu">智谱 GLM / Zhipu</option>
+        <option value="siliconflow">SiliconFlow</option>
+        <option value="moonshot">Moonshot / Kimi</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="fourrouter">4Router / 自定义聚合平台</option>
+        <option value="volcengine">火山引擎 / 豆包</option>
+        <option value="anthropic">Anthropic / Claude Code</option>
+        <option value="custom">自定义 OpenAI-compatible</option>
+      </select>
+      <label class="form-label">API Key</label>
+      <input id="apiKeyInput" class="modal-input" type="password" placeholder="输入对应平台的 API Key" />
+      <label class="form-label">Base URL</label>
+      <input id="apiBaseUrlInput" class="modal-input" type="text" placeholder="选择供应商后自动填充；自定义时手动填写" />
+      <label class="form-label">模型选择</label>
+      <select id="apiModelSelect" class="modal-input"></select>
+      <input id="apiCustomModelInput" class="modal-input" type="text" placeholder="自定义模型名称，例如 claude-sonnet-4-6 / deepseek-chat / qwen-plus / glm-4-flash" />
+      <div class="modal-actions modal-actions-wrap">
+        <button id="saveApiKey">保存并测试</button>
+        <button id="testApiKey" class="ghost">仅测试连接</button>
+        <button id="clearApiKey" class="ghost">清除</button>
+      </div>
+            <div class="saved-api-box">
+        <button id="useSavedApiConfig" class="ghost" type="button">调用已记住配置</button>
+        <div id="savedApiConfigHint" class="modal-status subtle"></div>
+      </div>
+      <div id="apiKeyStatus" class="modal-status"></div>
+    </div>
+  </div>
+
+
+  <div class="modal-backdrop" id="apiHistoryModal" hidden>
+    <div class="modal-card compact-modal">
+      <div class="modal-head">
+        <h3>选择已记住的 API 配置</h3>
+        <button id="closeApiHistoryModal">×</button>
+      </div>
+      <div id="apiHistoryList" class="api-history-list"></div>
+      <div id="apiHistoryStatus" class="modal-status"></div>
+    </div>
+  </div>
+
+
+  <div class="modal-backdrop" id="fontModal" hidden>
+    <div class="modal-card compact-modal">
+      <div class="modal-head">
+        <h3>字体设置</h3>
+        <button id="closeFontModal">×</button>
+      </div>
+      <label class="form-label">字体型号</label>
+      <select id="fontFamilySelect" class="modal-input">
+        <option value="system">系统默认</option>
+        <option value="yahei">微软雅黑</option>
+        <option value="songti">宋体</option>
+        <option value="heiti">黑体</option>
+        <option value="arial">Arial</option>
+      </select>
+      <label class="form-label">字体大小</label>
+      <select id="fontSizeSelect" class="modal-input">
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+        <option value="16">16</option>
+        <option value="17">17</option>
+        <option value="18">18</option>
+        <option value="20">20</option>
+        <option value="22">22</option>
+      </select>
+      <div class="modal-actions">
+        <button id="saveFontConfig">保存</button>
+      </div>
+      <div class="modal-status">字体设置只保存在当前浏览器。</div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=chatui34"></script>
+</body>
+</html>

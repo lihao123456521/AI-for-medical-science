@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ article.title or article.article_id }} 文献详情</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui27" />
+</head>
+<body class="detail-body">
+  <main class="case-detail">
+    <a class="back-link" href="/articles">← 返回文章库</a>
+    <article class="detail-card">
+      <div class="detail-head">
+        <div>
+          <h1>{{ article.title or '未命名文献' }}</h1>
+          <p>{{ article.article_id }}</p>
+        </div>
+        {% if article.source_url %}
+          <a class="case-open-btn" href="{{ article.source_url }}" target="_blank">打开原文件</a>
+        {% endif %}
+      </div>
+      <div class="case-grid article-detail-grid">
+        {% for label, key in [("作者", "authors"), ("期刊/来源", "journal"), ("年份", "year"), ("关键词", "keywords"), ("来源文件", "source_file"), ("摘要", "abstract"), ("正文/关键结论", "content"), ("备注", "notes")] %}
+          {% set value = article.get(key) %}
+          {% if value %}
+            <section class="case-field {% if key in ['abstract','content','notes'] %}wide-field{% endif %}">
+              <b>{{ label }}</b>
+              <p>{{ value }}</p>
+            </section>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </article>
+  </main>
+</body>
+</html>

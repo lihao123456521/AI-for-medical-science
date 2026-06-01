@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>文章投喂</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui28" />
+</head>
+<body class="detail-body">
+  <main class="kb-page">
+    <header class="kb-page-head">
+      <a class="back-link" href="/knowledge">← 返回病例知识库</a>
+      <div class="kb-title-row">
+        <div>
+          <h1>文章投喂</h1>
+          <p>把文献摘要、指南片段或综述内容加入文献库；之后回答会同时参考相似病例和已投喂文章。</p>
+        </div>
+        <div class="kb-title-actions">
+          <button id="bulkDeleteArticles" class="danger-tool-btn square-danger">一键删除</button>
+          <img class="kb-mascot mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="" />
+        </div>
+      </div>
+    </header>
+
+    <section class="add-case-card standalone-form">
+      <h2>投喂文章</h2>
+      <div class="add-grid article-grid">
+        <input id="articleTitle" placeholder="文章标题" />
+        <input id="articleAuthors" placeholder="作者，可选" />
+        <input id="articleJournal" placeholder="期刊/来源，可选" />
+        <input id="articleYear" placeholder="年份，可选" />
+      </div>
+      <input id="articleKeywords" class="full-input" placeholder="关键词，如：urethral SCC, lichen sclerosus, surgery, recurrence" />
+      <textarea id="articleAbstract" placeholder="摘要，可选"></textarea>
+      <textarea id="articleContent" placeholder="正文、关键结论、指南段落或复制的文章内容"></textarea>
+      <div class="upload-article-row compact-upload-line article-file-row">
+        <input id="articleFile" type="file" accept=".txt,.docx,.pdf,.xlsx,.xls,.csv,.md" multiple />
+        <button id="parseArticleFile" class="ghost-btn compact-action-btn">解析并保存文件</button>
+      </div>
+      <div class="upload-article-row compact-upload-line article-folder-row">
+        <label class="folder-picker compact-picker article-folder-picker">
+          选择文章文件夹
+          <input id="articleFolder" type="file" accept=".txt,.docx,.pdf,.xlsx,.xls,.csv,.md" webkitdirectory multiple hidden />
+        </label>
+        <button id="parseArticleFolder" class="ghost-btn compact-action-btn" type="button">一键分析文件夹</button>
+      </div>
+      <div class="manual-article-save-line">
+        <button id="submitArticle" class="manual-save-btn compact-action-btn" type="button">保存手动输入文章</button>
+      </div>
+      <div id="articleUploadStatus" class="inline-status fine-upload-status">支持 DOCX、PDF、TXT、Excel、CSV、MD；可一次选择多个文件，也可选择文件夹批量分析。</div>
+      <div id="articleBatchStatus" class="inline-status"></div>
+      <div class="form-actions">
+        <a class="ghost-link" href="/knowledge">返回知识库</a>
+      </div>
+      <div id="articleStatus" class="inline-status"></div>
+    </section>
+
+    <section class="kb-tools article-search-tools article-search-row">
+      <input id="articleSearch" placeholder="查询已投喂文章：标题、关键词、摘要、正文..." />
+      <button id="queryArticles">查询文章</button>
+    </section>
+    <div id="articleStorageStatus" class="storage-status"></div>
+    <section id="articleList" class="article-list-page"></section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/articles.js') }}?v=chatui28"></script>
+</body>
+</html>

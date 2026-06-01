@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>病例知识库</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui28" />
+</head>
+<body class="detail-body">
+  <main class="kb-page">
+    <header class="kb-page-head">
+      <a class="back-link" href="/">← 返回对话</a>
+      <div class="kb-title-row">
+        <div>
+          <h1>病例知识库</h1>
+          <p>检索病例、查看详情，也可以跳转添加新病例或投喂文献。</p>
+        </div>
+        <div class="kb-head-actions">
+          <button id="bulkDeleteCases" class="danger-tool-btn mascot-side-delete" title="删除当前查询结果">一键删除</button>
+          <img class="kb-mascot mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="" />
+        </div>
+      </div>
+    </header>
+
+    <section class="kb-action-row">
+      <a class="kb-action-btn" href="/add-case">＋ 添加病例</a>
+      <a class="kb-action-btn secondary" href="/articles">＋ 投喂文章</a>
+    </section>
+
+    <section class="kb-tools kb-tools-with-danger">
+      <input id="caseSearch" placeholder="输入关键词查询：诊断、LS、病理、影像、病例编号、手术、随访..." />
+      <select id="sheetFilter"><option value="">全部分组</option></select>
+      <button id="reloadCases">查询</button>
+    </section>
+
+    <section id="caseList" class="case-list-page"></section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/knowledge.js') }}?v=chatui28"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ case.case_id }} 病例详情</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui27" />
+</head>
+<body class="detail-body">
+  <main class="case-detail">
+    <a class="back-link" href="/knowledge">← 返回知识库</a>
+    <article class="detail-card">
+      <div class="detail-head">
+        <div>
+          <h1>{{ case.case_id }}</h1>
+          <p>{{ case.diagnosis or '诊断未记录' }}</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          <span class="detail-badge" id="caseGroupLabel">{{ case.sheet }}</span>
+          {% if case.case_id.startswith('USER-') %}<button class="case-open-btn" id="editLabelBtn">编辑知识库标签</button>{% endif %}
+          <button class="case-delete-btn" id="deleteCaseBtn">删除病例</button>
+        </div>
+      </div>
+      {% if case.medical_images %}
+        <section class="case-field wide-field medical-image-section">
+          <b>医学影像/病理图像</b>
+          <div class="medical-image-gallery">
+            {% for img in case.medical_images %}
+              <a class="medical-image-card" href="{{ img.url or '#' }}" target="_blank">
+                {% if img.type == 'image' and img.url and not img.url.endswith('.dcm') %}
+                  <img src="{{ img.url }}" alt="{{ img.filename }}" />
+                {% endif %}
+                <span>{{ img.filename }}</span>
+                {% if img.note %}<small>{{ img.note }}</small>{% endif %}
+              </a>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+      <div class="case-grid">
+        {% for label, key in fields %}
+          {% set value = case.get(key) %}
+          {% if value %}
+            <section class="case-field">
+              <b>{{ label }}</b>
+              <p>{{ value }}</p>
+            </section>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </article>
+  </main>
+  <script>
+    const caseId = {{ case.case_id|tojson }};
+    const editLabelBtn = document.getElementById('editLabelBtn');
+    if (editLabelBtn) {
+      editLabelBtn.addEventListener('click', async () => {
+        const oldLabel = {{ case.sheet|tojson }};
+        const input = prompt(`编辑病例 ${caseId} 的自定义标签：`, oldLabel);
+        if (input === null) return;
+        const label = input.trim();
+        if (!label) { alert('标签不能为空。'); return; }
+        const res = await fetch(`/api/case/${encodeURIComponent(caseId)}/label`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({label})});
+        const data = await res.json();
+        if (!res.ok || !data.ok) { alert(data.error || '标签保存失败'); return; }
+        document.getElementById('caseGroupLabel').textContent = label;
+      });
+    }
+
+
+    document.getElementById('deleteCaseBtn').addEventListener('click', async () => {
+      const ok = confirm(`删除病例 ${caseId}？\n删除后将从当前知识库检索结果中移除。`);
+      if (!ok) return;
+      const res = await fetch(`/api/case/${encodeURIComponent(caseId)}`, {method:'DELETE'});
+      const data = await res.json();
+      if (!res.ok || !data.ok) { alert(data.error || '删除失败'); return; }
+      window.location.href = '/knowledge';
+    });
+  </script>
+</body>
+</html>

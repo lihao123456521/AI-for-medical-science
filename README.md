@@ -77,7 +77,7 @@ FLASK_SECRET_KEY=change-this-in-production
 
 ## 部署
 
-仓库已包含 `render.yaml` 和 `Procfile`。部署公网演示时，建议只使用合成数据，并在托管平台后台设置 `FLASK_SECRET_KEY`。如需在线模型，再单独配置 API Key。
+仓库已包含 `render.yaml` 和 `Procfile`。在 Render 中创建 Blueprint 并连接本仓库，首次部署时填写 `FLASK_SECRET_KEY`。公网演示应只使用合成数据；如需在线模型，再在托管平台后台单独配置 API Key。
 
 ## 后续路线
 
@@ -86,4 +86,3 @@ FLASK_SECRET_KEY=change-this-in-production
 3. 为规则评分增加验证集、敏感度、特异度、AUC 和错误案例分析。
 4. 建立合规的数据字典、版本说明和研究协议。
 5. 录制简短演示视频，并在项目首页加入截图和使用场景。
-

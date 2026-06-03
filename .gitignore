@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+.package-build/
 
 # Runtime data and uploads may contain sensitive medical information.
 uploads/*
@@ -17,4 +18,3 @@ data/deleted_cases.json
 data/articles.json
 data/api_config.json
 data/api_config_history.json
-

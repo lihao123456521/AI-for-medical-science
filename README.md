@@ -1,88 +1,126 @@
 # AI for Medical Science
 
-这是一个用于医学科研与教学展示的 Flask 原型：围绕尿道鳞状细胞癌（SCC）、硬化性苔藓（LS）和尿道狭窄等因素，演示规则评分、相似病例检索、病例文件解析、图片附件上传和可选 AI 对话。
+UroSCC-LS Risk AI is a Flask-based medical science prototype for case entry, local knowledge-base retrieval, risk-factor explanation, and assisted discussion around male urethral squamous cell carcinoma and lichen sclerosus related clinical evidence.
 
-## 公开版本说明
+This project is intended for teaching, research discussion, and prototype demonstration. It is not a medical device and must not be used as a diagnosis, staging, treatment, or triage system.
 
-本仓库仅包含**完全合成的演示病例**，不包含真实患者姓名、住院日期、病历或受保护健康信息。默认知识库位于 `data/knowledge_base.xlsx`，其中每条记录均标记为 `DEMO-*`。
+## Promotional Video
 
-该项目只适合教学、科研讨论和软件原型展示，不构成诊断、分期或治疗建议。
+[![AI rare disease treatment promotional video](docs/media/promo-poster.jpg)](docs/media/ai-rare-disease-treatment-promo.mp4)
 
-## 本地运行
+Watch the short promotional demo: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo.mp4).
 
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env
-python app.py
-```
+## Download Packages
 
-打开：
+The packages are portable source-based installers. Users need Python 3.10 or newer; the package startup scripts create a virtual environment and install the required Python libraries.
+
+| System | Download | How to start |
+| --- | --- | --- |
+| Windows | [AI-for-medical-science-windows.zip](dist/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `start_windows_local.bat` |
+| macOS | [AI-for-medical-science-macos.tar.gz](dist/AI-for-medical-science-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
+| Linux | [AI-for-medical-science-linux.tar.gz](dist/AI-for-medical-science-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
+
+After startup, open:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-健康检查：
+## What It Does
 
-```text
-http://127.0.0.1:5000/healthz
-```
+- Structured case entry for symptoms, imaging, pathology, immunohistochemistry, and clinical notes.
+- Local knowledge-base search from `data/knowledge_base.xlsx`.
+- Transparent risk-factor extraction and rule-based scoring.
+- Similar-case retrieval and case discussion support.
+- Optional OpenAI-compatible API integration for explanatory summaries.
+- Upload parsing for Excel, CSV, Word, text, PDF, and image attachments.
 
-macOS 或 Linux 可使用：
+## Quick Start From Source
 
-```bash
+### Windows
+
+```powershell
 python -m venv .venv
-source .venv/bin/activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 python app.py
 ```
 
-## 可选 AI 接入
+Or double-click:
 
-复制 `.env.example` 为 `.env` 后再填写本地配置。不要把 `.env` 或 API Key 提交到 GitHub。
+```text
+start_windows_local.bat
+```
+
+### macOS / Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+[ -f .env ] || cp .env.example .env
+python app.py
+```
+
+Or run:
+
+```bash
+bash run_mac_linux.sh
+```
+
+## Optional AI API Configuration
+
+Copy `.env.example` to `.env`, then fill in your API key if you want AI-generated explanatory summaries.
 
 ```env
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 FLASK_SECRET_KEY=change-this-in-production
+DATA_PATH=data/knowledge_base.xlsx
+USCC_DATA_DIR=.uscc_scc_flask_data
 ```
 
-不配置 API Key 时，应用仍可使用本地规则和演示病例运行。
+The app can still run with local rules and knowledge-base retrieval when no API key is configured.
 
-## 主要功能
+## Repository Structure
 
-- 结构化病例录入与文件解析
-- 规则化风险特征提取与可追溯评分
-- 相似病例检索
-- 图片和文档附件上传
-- 可选 OpenAI、Anthropic 或 OpenAI-compatible 模型调用
-- Render 部署配置
+```text
+.
+├── app.py
+├── core/
+│   ├── case_parser.py
+│   ├── data_loader.py
+│   ├── llm_client.py
+│   └── risk_engine.py
+├── data/
+│   ├── knowledge_base.xlsx
+│   └── knowledge_base_manifest.json
+├── static/
+├── templates/
+├── scripts/
+├── docs/media/
+└── dist/
+```
 
-## 编辑项目
+## Security And Data Notes
 
-常用修改位置：
+- Do not upload identifiable patient information to public GitHub repositories.
+- Do not commit `.env` or API keys.
+- Treat uploaded case files, runtime logs, and generated local data in `USCC_DATA_DIR` as sensitive.
+- Public demonstrations should use synthetic or fully de-identified cases only.
+- Every output should be reviewed by qualified medical professionals before any real-world interpretation.
 
-- 页面布局：`templates/`
-- 样式：`static/css/style.css`
-- 前端交互：`static/js/`
-- Flask 接口：`app.py`
-- 风险规则：`core/risk_engine.py`
-- 模型调用：`core/llm_client.py`
-- 合成演示知识库：`data/knowledge_base.xlsx`
+## Deployment
 
-每次公开提交前，请确认没有加入真实病例、上传文件、`.env` 或 API Key。详细要求见 [SECURITY_AND_DATA_POLICY.md](SECURITY_AND_DATA_POLICY.md)。
+For a cloud demo, use the included `render.yaml` or deploy the Flask app behind Gunicorn/Nginx on a controlled server. Before public deployment, add authentication, audit logging, data retention controls, and a complete privacy review.
 
-## 部署
+## Rebuild Download Packages
 
-仓库已包含 `render.yaml` 和 `Procfile`。在 Render 中创建 Blueprint 并连接本仓库，首次部署时填写 `FLASK_SECRET_KEY`。公网演示应只使用合成数据；如需在线模型，再在托管平台后台单独配置 API Key。
+From the project root on Windows PowerShell:
 
-## 后续路线
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_release_packages.ps1
+```
 
-1. 增加登录和角色权限。
-2. 将真实研究数据保存在受控环境，而不是公开仓库。
-3. 为规则评分增加验证集、敏感度、特异度、AUC 和错误案例分析。
-4. 建立合规的数据字典、版本说明和研究协议。
-5. 录制简短演示视频，并在项目首页加入截图和使用场景。
+Generated packages are written to `dist/`.

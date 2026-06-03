@@ -1,14 +1,62 @@
 {
-  "data_classification": "PUBLIC SYNTHETIC DEMO DATA ONLY",
-  "source": "Generated synthetic records for public software demonstration",
+  "source_uploaded_file": "知识库（一）(2).xlsx",
   "default_database_file": "data/knowledge_base.xlsx",
   "summary": {
-    "total_cases": 12,
+    "total_cases": 77,
     "sheets": {
-      "合成演示病例": 12
+      "USCC": 39,
+      "其他类型尿道肿瘤": 19,
+      "阴茎癌": 10,
+      "其他": 9
     },
-    "synthetic_cases": 12,
-    "real_patient_records": 0
+    "sheet_shapes": {
+      "USCC": {
+        "rows": 40,
+        "columns": 26
+      },
+      "其他类型尿道肿瘤": {
+        "rows": 19,
+        "columns": 27
+      },
+      "阴茎癌": {
+        "rows": 10,
+        "columns": 28
+      },
+      "其他": {
+        "rows": 9,
+        "columns": 27
+      }
+    },
+    "scc_related_cases": 43,
+    "ls_mentions": 5,
+    "recurrence_or_metastasis_mentions": 20,
+    "age_min": 21.0,
+    "age_max": 82.0,
+    "age_mean": 53.3
   },
-  "compliance_note": "Do not commit real patient data, protected health information, API keys, or runtime uploads."
+  "sample_first_case": {
+    "case_id": "USCC-001",
+    "sheet": "USCC",
+    "diagnosis": "尿道鳞癌",
+    "sex": "男",
+    "age": 45.0,
+    "history": "原发排尿困难2年，发现肿物2年；包皮环切术后尿道狭窄",
+    "prior_operation": "",
+    "symptoms": "排尿困难、尿道狭窄",
+    "tumor": "位置：近端尿道（球部）+远端尿道（阴茎部）",
+    "grade": "G3",
+    "tnm": "T3N2M1",
+    "lymph_node": "腹膜后多发淋巴结转移",
+    "ls": "",
+    "immuno": "",
+    "imaging": "",
+    "pathology": "鳞癌，纤维组织内见癌浸润",
+    "surgery": "尿道全部切除术+阴茎全部切除术+膀胱造瘘术",
+    "other_treatment": "紫杉醇+顺铂*3",
+    "recurrence": "有，术后5月左侧且血管旁、腹主动脉旁、左侧腹股沟淋巴结转移，骨转移",
+    "followup": "",
+    "remarks": "",
+    "source_row": 3,
+    "medical_images": []
+  }
 }

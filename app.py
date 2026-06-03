@@ -48,6 +48,7 @@ API_CONFIG_PATH = PERSISTENT_DATA_DIR / "api_config.json"
 API_CONFIG_HISTORY_PATH = PERSISTENT_DATA_DIR / "api_config_history.json"
 LIBRARY_STATE_PATH = PERSISTENT_DATA_DIR / "library_state.json"
 KB_DIGEST_PATH = PERSISTENT_DATA_DIR / "knowledge_digest.json"
+PERSISTENCE_REPAIR_LOG_PATH = PERSISTENT_DATA_DIR / "persistence_repair_log.json"
 ARTICLES_DELETED_MARKER = PERSISTENT_DATA_DIR / "articles_deleted_all.marker"
 ARTICLES_V34_CLEARED_MARKER = PERSISTENT_DATA_DIR / "articles_v34_cleared.marker"
 
@@ -71,7 +72,7 @@ def _record_to_saved_dict(rec: CaseRecord) -> Dict[str, Any]:
         "surgery": getattr(rec, "surgery", ""),
         "other_treatment": getattr(rec, "other_treatment", ""),
         "source_row": getattr(rec, "source_row", 0),
-        "medical_images": getattr(rec, "medical_images", []) or [],
+        "medical_images": _normalize_medical_images(getattr(rec, "medical_images", []) or []),
         "case_signature": getattr(rec, "case_signature", "") or "",
         "tags": _get_case_tags(rec),
     })
@@ -96,9 +97,29 @@ def _json_safe(value: Any) -> Any:
 
 def _case_to_public_dict(rec: CaseRecord) -> Dict[str, Any]:
     data = rec.as_public_dict()
+    data["medical_images"] = _normalize_medical_images(data.get("medical_images") or [])
     data["tags"] = _get_case_tags(rec)
     data["tag_text"] = "，".join(data["tags"])
     return _json_safe(data)
+
+
+def _normalize_medical_images(images: Any) -> List[Dict[str, Any]]:
+    """Keep case image references portable across app restarts."""
+    normalized: List[Dict[str, Any]] = []
+    for item in images if isinstance(images, list) else []:
+        if not isinstance(item, dict):
+            continue
+        stored_as = Path(str(item.get("stored_as") or "")).name
+        filename = str(item.get("filename") or stored_as or "医学影像")
+        url = f"/uploads/{stored_as}" if stored_as else str(item.get("url") or "")
+        normalized.append({
+            **item,
+            "type": "image",
+            "filename": filename,
+            "stored_as": stored_as,
+            "url": url,
+        })
+    return normalized
 
 
 def _case_matches_query(rec: CaseRecord, query: str) -> bool:
@@ -114,13 +135,8 @@ def _case_matches_query(rec: CaseRecord, query: str) -> bool:
     return all(term in haystack for term in terms)
 
 def _load_deleted_case_ids() -> set[str]:
-    if not DELETED_CASES_PATH.exists():
-        return set()
-    try:
-        rows = json.loads(DELETED_CASES_PATH.read_text(encoding="utf-8"))
-        return {str(x) for x in rows if str(x).strip()}
-    except Exception:
-        return set()
+    rows = _read_json_with_backup(DELETED_CASES_PATH, [])
+    return {str(x) for x in rows if str(x).strip()} if isinstance(rows, list) else set()
 
 
 def _save_deleted_case_ids(ids: set[str]) -> None:
@@ -131,23 +147,18 @@ def _save_deleted_case_ids(ids: set[str]) -> None:
 
 
 def _load_case_tags() -> Dict[str, List[str]]:
-    if not CASE_TAGS_PATH.exists():
-        return {}
-    try:
-        raw = json.loads(CASE_TAGS_PATH.read_text(encoding="utf-8"))
-        if isinstance(raw, dict):
-            out: Dict[str, List[str]] = {}
-            for cid, tags in raw.items():
-                if isinstance(tags, str):
-                    items = [x.strip() for x in re.split(r"[,，;；\s]+", tags) if x.strip()]
-                elif isinstance(tags, list):
-                    items = [str(x).strip() for x in tags if str(x).strip()]
-                else:
-                    items = []
-                out[str(cid)] = list(dict.fromkeys(items))[:12]
-            return out
-    except Exception:
-        pass
+    raw = _read_json_with_backup(CASE_TAGS_PATH, {})
+    if isinstance(raw, dict):
+        out: Dict[str, List[str]] = {}
+        for cid, tags in raw.items():
+            if isinstance(tags, str):
+                items = [x.strip() for x in re.split(r"[,，;；\s]+", tags) if x.strip()]
+            elif isinstance(tags, list):
+                items = [str(x).strip() for x in tags if str(x).strip()]
+            else:
+                items = []
+            out[str(cid)] = list(dict.fromkeys(items))[:12]
+        return out
     return {}
 
 
@@ -263,18 +274,15 @@ def _knowledge_digest() -> Dict[str, Any]:
 
 
 def _load_library_snapshot() -> Dict[str, Any]:
-    try:
-        data = json.loads(LIBRARY_STATE_PATH.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    data = _read_json_with_backup(LIBRARY_STATE_PATH, {})
+    return data if isinstance(data, dict) else {}
 
 
 def _save_library_snapshot() -> None:
     snapshot = {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "user_cases": _read_nonempty_json(USER_CASES_PATH) or [],
-        "articles": _read_nonempty_json(ARTICLES_PATH) or [],
+        "user_cases": _read_json_with_backup(USER_CASES_PATH, []),
+        "articles": _read_json_with_backup(ARTICLES_PATH, []),
         "deleted_case_ids": sorted(_load_deleted_case_ids()),
     }
     _atomic_write_json(LIBRARY_STATE_PATH, snapshot)
@@ -284,27 +292,22 @@ def _restore_from_library_snapshot_if_needed() -> None:
     snap = _load_library_snapshot()
     if not snap:
         return
-    if (not USER_CASES_PATH.exists()) or _read_nonempty_json(USER_CASES_PATH) is None:
+    if not _is_valid_json_file(USER_CASES_PATH):
         _atomic_write_json(USER_CASES_PATH, snap.get("user_cases") or [])
-    if (not ARTICLES_PATH.exists()) or _read_nonempty_json(ARTICLES_PATH) is None:
+    if not _is_valid_json_file(ARTICLES_PATH):
         _atomic_write_json(ARTICLES_PATH, snap.get("articles") or [])
-    if (not DELETED_CASES_PATH.exists()) or _read_nonempty_json(DELETED_CASES_PATH) is None:
+    if not _is_valid_json_file(DELETED_CASES_PATH):
         _atomic_write_json(DELETED_CASES_PATH, snap.get("deleted_case_ids") or [])
 
 
 def _load_articles() -> List[Dict[str, Any]]:
-    if not ARTICLES_PATH.exists():
-        snap = _load_library_snapshot()
-        rows = snap.get("articles") or []
-        return [_json_safe(x) for x in rows if isinstance(x, dict)] if isinstance(rows, list) else []
-    try:
-        rows = json.loads(ARTICLES_PATH.read_text(encoding="utf-8"))
-        if isinstance(rows, list):
-            return [_json_safe(x) for x in rows if isinstance(x, dict)]
-    except Exception:
-        snap = _load_library_snapshot()
-        rows = snap.get("articles") or []
-        return [_json_safe(x) for x in rows if isinstance(x, dict)] if isinstance(rows, list) else []
+    rows = _read_json_with_backup(ARTICLES_PATH, None)
+    if isinstance(rows, list):
+        return [_json_safe(x) for x in rows if isinstance(x, dict)]
+    snap = _load_library_snapshot()
+    rows = snap.get("articles") or []
+    if isinstance(rows, list):
+        return [_json_safe(x) for x in rows if isinstance(x, dict)]
     return []
 
 
@@ -334,16 +337,33 @@ def _atomic_write_json(path: Path, data: Any) -> None:
     tmp.replace(path)
 
 
-def _read_nonempty_json(path: Path) -> Any | None:
+def _read_json_with_backup(path: Path, default: Any = None) -> Any:
+    """Read the main JSON file first and use its backup only if needed.
+
+    An empty list or dict is valid persisted state. Older versions treated it
+    like a broken file and loaded stale backup rows, which could resurrect
+    deleted cases and then hide them again through deletion tombstones.
+    """
     for cand in [path, path.with_suffix(path.suffix + ".bak")]:
         try:
             if cand.exists():
-                data = json.loads(cand.read_text(encoding="utf-8"))
-                if data not in (None, [], {}):
-                    return data
+                return json.loads(cand.read_text(encoding="utf-8"))
         except Exception:
             continue
-    return None
+    return default
+
+
+def _is_valid_json_file(path: Path) -> bool:
+    try:
+        json.loads(path.read_text(encoding="utf-8"))
+        return True
+    except Exception:
+        return False
+
+
+def _read_nonempty_json(path: Path) -> Any | None:
+    data = _read_json_with_backup(path, None)
+    return data if data not in (None, [], {}) else None
 
 
 def _legacy_json_candidates(filename: str) -> List[Path]:
@@ -476,8 +496,86 @@ def _ensure_json_file(path: Path, default: Any) -> None:
     storage. This fixes the recurring “0 个病例、70 篇文章” problem caused by
     re-importing bundled demo JSON after every front-end replacement.
     """
-    if not path.exists():
-        _atomic_write_json(path, default)
+    if _is_valid_json_file(path):
+        return
+    _atomic_write_json(path, _read_json_with_backup(path, default))
+
+
+def _reconcile_user_case_tombstones() -> int:
+    """Restore saved user cases that old versions accidentally hid on restart.
+
+    A USER-* row present in user_cases.json is active persisted data. Deleting a
+    user case removes that row, so a simultaneous tombstone is a stale conflict.
+    Built-in Excel case tombstones remain untouched.
+    """
+    rows = _read_json_with_backup(USER_CASES_PATH, [])
+    if not isinstance(rows, list):
+        return 0
+    saved_ids = {
+        str(row.get("case_id") or "").strip()
+        for row in rows
+        if isinstance(row, dict) and str(row.get("case_id") or "").startswith("USER-")
+    }
+    deleted = _load_deleted_case_ids()
+    restored = sorted(saved_ids & deleted)
+    if not restored:
+        return 0
+    _atomic_write_json(DELETED_CASES_PATH, sorted(deleted - set(restored)))
+    _atomic_write_json(PERSISTENCE_REPAIR_LOG_PATH, {
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "repair": "restored_saved_user_cases_hidden_by_tombstones",
+        "restored_user_case_count": len(restored),
+        "restored_user_case_ids": restored,
+    })
+    return len(restored)
+
+
+def _deduplicate_saved_user_cases() -> int:
+    """Keep the oldest saved copy of each clinically identical user case."""
+    rows = _read_json_with_backup(USER_CASES_PATH, [])
+    if not isinstance(rows, list):
+        return 0
+
+    def sort_key(row: Dict[str, Any]) -> tuple[int, str]:
+        case_id = str(row.get("case_id") or "")
+        try:
+            return int(case_id.split("-", 1)[1]), case_id
+        except Exception:
+            return 10**12, case_id
+
+    kept: List[Dict[str, Any]] = []
+    removed_ids: List[str] = []
+    seen: set[str] = set()
+    signatures_updated = False
+    for row in sorted((x for x in rows if isinstance(x, dict)), key=sort_key):
+        fingerprint = _case_duplicate_fingerprint(row)
+        if fingerprint and fingerprint in seen:
+            case_id = str(row.get("case_id") or "").strip()
+            if case_id:
+                removed_ids.append(case_id)
+            continue
+        if fingerprint:
+            seen.add(fingerprint)
+            if str(row.get("case_signature") or "") != fingerprint:
+                row = {**row, "case_signature": fingerprint}
+                signatures_updated = True
+        kept.append(row)
+    if not removed_ids and not signatures_updated:
+        return 0
+    _atomic_write_json(USER_CASES_PATH, kept)
+    if not removed_ids:
+        return 0
+    deleted = _load_deleted_case_ids()
+    deleted.update(removed_ids)
+    _atomic_write_json(DELETED_CASES_PATH, sorted(deleted))
+    _atomic_write_json(PERSISTENCE_REPAIR_LOG_PATH, {
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "repair": "removed_duplicate_user_cases",
+        "kept_user_case_count": len(kept),
+        "removed_duplicate_count": len(removed_ids),
+        "removed_duplicate_case_ids": removed_ids,
+    })
+    return len(removed_ids)
 
 
 def _clear_packaged_articles_if_resurrected() -> None:
@@ -520,7 +618,7 @@ def _clear_v34_requested_article_library() -> None:
 
 
 def _ensure_storage_files() -> None:
-    """Prepare v30 persistent storage.
+    """Prepare persistent storage.
 
     Runtime user data lives only in ~/.uscc_scc_flask_data unless USCC_DATA_DIR
     is explicitly set. Bundled JSON files are never re-imported automatically;
@@ -532,10 +630,12 @@ def _ensure_storage_files() -> None:
     _ensure_json_file(ARTICLES_PATH, [])
     _ensure_json_file(CASE_TAGS_PATH, {})
     _clear_packaged_articles_if_resurrected()
-    _clear_v34_requested_article_library()
+    _reconcile_user_case_tombstones()
+    _deduplicate_saved_user_cases()
     _migrate_uploads_if_needed()
+    _save_library_snapshot()
     state = {
-        "storage_version": "v34",
+        "storage_version": "v36",
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "data_dir": str(PERSISTENT_DATA_DIR),
         "source_of_truth": "persistent_only",
@@ -558,6 +658,7 @@ def _save_articles(rows: List[Dict[str, Any]]) -> None:
             ARTICLES_DELETED_MARKER.write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
         except Exception:
             pass
+    _save_library_snapshot()
     _write_storage_manifest()
 
 
@@ -572,7 +673,7 @@ def _write_storage_manifest() -> None:
         article_count = -1
     _atomic_write_json(PERSISTENT_DATA_DIR / "storage_manifest.json", {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "storage_version": "v34",
+        "storage_version": "v36",
         "data_dir": str(PERSISTENT_DATA_DIR),
         "user_cases_path": str(USER_CASES_PATH),
         "user_case_count": case_count,
@@ -580,6 +681,8 @@ def _write_storage_manifest() -> None:
         "article_count": article_count,
         "articles_deleted_marker": ARTICLES_DELETED_MARKER.exists(),
         "deleted_cases_path": str(DELETED_CASES_PATH),
+        "uploads_path": str(UPLOAD_DIR),
+        "persistence_repair_log_path": str(PERSISTENCE_REPAIR_LOG_PATH),
     })
 
 
@@ -599,7 +702,7 @@ def _article_matches_query(article: Dict[str, Any], query: str) -> bool:
     q = (query or "").strip().lower()
     if not q:
         return True
-    haystack = "\n".join(str(article.get(k) or "") for k in ["title", "authors", "journal", "year", "keywords", "abstract", "content", "notes"]).lower()
+    haystack = "\n".join(str(article.get(k) or "") for k in ["title", "authors", "journal", "year", "doi", "source_url", "keywords", "abstract", "content", "notes"]).lower()
     terms = [x for x in q.replace("，", " ").replace(",", " ").split() if x]
     return all(t in haystack for t in terms) if terms else q in haystack
 
@@ -840,15 +943,35 @@ def _summarize_article_images_for_doctor(images: List[Dict[str, Any]], filename:
 
 def _article_signature_fields(fields: Dict[str, Any]) -> str:
     title = str(fields.get("title") or "").strip().lower()
+    doi = _normalize_article_doi(fields.get("doi") or "")
+    source_url = _normalize_article_url(fields.get("source_url") or "")
     source_file = str(fields.get("source_file") or "").strip().lower()
     content = str(fields.get("content") or fields.get("abstract") or "").strip().lower()
-    normalized = re.sub(r"\s+", "", title + "|" + source_file + "|" + content[:80000])
+    normalized = re.sub(r"\s+", "", title + "|" + doi + "|" + source_url + "|" + source_file + "|" + content[:80000])
     return hashlib.sha256(normalized.encode("utf-8", errors="ignore")).hexdigest() if normalized else ""
+
+
+def _normalize_article_doi(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    text = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", text)
+    match = re.search(r"10\.\d{4,9}/[-._;()/:a-z0-9]+", text, re.I)
+    return match.group(0).rstrip(".,;") if match else ""
+
+
+def _normalize_article_url(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return re.sub(r"[?#].*$", "", text).rstrip("/")
+
+
+def _normalize_article_title(value: Any) -> str:
+    return re.sub(r"[\W_]+", "", str(value or "").strip().lower(), flags=re.UNICODE)
 
 
 def _find_duplicate_article(fields: Dict[str, Any], exclude_id: str = "") -> Dict[str, Any] | None:
     sig = _article_signature_fields(fields)
-    title = re.sub(r"\s+", "", str(fields.get("title") or "").lower())
+    doi = _normalize_article_doi(fields.get("doi") or fields.get("source_url") or "")
+    source_url = _normalize_article_url(fields.get("source_url") or "")
+    title = _normalize_article_title(fields.get("title") or "")
     source_file = re.sub(r"\s+", "", str(fields.get("source_file") or "").lower())
     content_head = re.sub(r"\s+", "", str(fields.get("content") or fields.get("abstract") or "").lower())[:2000]
     for row in _load_articles():
@@ -857,9 +980,17 @@ def _find_duplicate_article(fields: Dict[str, Any], exclude_id: str = "") -> Dic
         row_sig = row.get("signature") or _article_signature_fields(row)
         if sig and row_sig == sig:
             return row
-        row_title = re.sub(r"\s+", "", str(row.get("title") or "").lower())
+        row_doi = _normalize_article_doi(row.get("doi") or row.get("source_url") or "")
+        row_url = _normalize_article_url(row.get("source_url") or "")
+        row_title = _normalize_article_title(row.get("title") or "")
         row_source = re.sub(r"\s+", "", str(row.get("source_file") or "").lower())
         row_head = re.sub(r"\s+", "", str(row.get("content") or row.get("abstract") or "").lower())[:2000]
+        if doi and row_doi and doi == row_doi:
+            return row
+        if source_url and row_url and source_url == row_url:
+            return row
+        if len(title) >= 12 and title == row_title:
+            return row
         if source_file and row_source and source_file == row_source:
             return row
         if title and row_title and title == row_title and content_head and row_head and content_head == row_head:
@@ -877,6 +1008,7 @@ def _add_article(fields: Dict[str, Any]) -> Dict[str, Any]:
         "authors": str(fields.get("authors") or "").strip(),
         "journal": str(fields.get("journal") or "").strip(),
         "year": str(fields.get("year") or "").strip(),
+        "doi": _normalize_article_doi(fields.get("doi") or fields.get("source_url") or ""),
         "keywords": str(fields.get("keywords") or "").strip(),
         "abstract": abstract,
         "content": content,
@@ -1183,16 +1315,7 @@ def _find_candidate_matches(attachments: List[Dict[str, Any]], query: str, limit
     return _json_safe(scored[:limit])
 
 def _load_user_cases() -> None:
-    data = _read_nonempty_json(USER_CASES_PATH)
-    if data is None:
-        # Empty main file means genuinely no saved user cases. Do not import
-        # packaged defaults repeatedly.
-        try:
-            rows = json.loads(USER_CASES_PATH.read_text(encoding="utf-8")) if USER_CASES_PATH.exists() else []
-        except Exception:
-            rows = []
-    else:
-        rows = data
+    rows = _read_json_with_backup(USER_CASES_PATH, [])
     if not isinstance(rows, list):
         rows = []
     existing = {r.case_id for r in kb.records}
@@ -1224,8 +1347,9 @@ def _load_user_cases() -> None:
                 followup=str(row.get("followup") or ""),
                 remarks=str(row.get("remarks") or ""),
                 source_row=int(row.get("source_row") or 0),
-                medical_images=row.get("medical_images") if isinstance(row.get("medical_images"), list) else [],
+                medical_images=_normalize_medical_images(row.get("medical_images") or []),
             )
+            rec.case_signature = str(row.get("case_signature") or "")
             kb.records.append(rec)
             existing.add(case_id)
             if isinstance(row.get("tags"), list):
@@ -1248,10 +1372,15 @@ def _save_user_cases() -> None:
     now = datetime.now().isoformat(timespec="seconds")
     for r in kb.records:
         if _is_user_case(r):
+            r.case_signature = _case_duplicate_fingerprint(_case_fields_from_record(r))
             d = _record_to_saved_dict(r)
             d["persisted_at"] = now
             rows.append(d)
     _atomic_write_json(USER_CASES_PATH, rows)
+    active_ids = {str(row.get("case_id") or "") for row in rows}
+    deleted = _load_deleted_case_ids()
+    if active_ids & deleted:
+        _atomic_write_json(DELETED_CASES_PATH, sorted(deleted - active_ids))
     # Read-back verification marker. If the file cannot be read, the manifest
     # will expose the mismatch instead of silently losing data.
     try:
@@ -1264,66 +1393,84 @@ def _save_user_cases() -> None:
 
 def _next_user_case_id() -> str:
     nums = []
-    for r in kb.records:
-        if r.case_id.startswith("USER-"):
+    known_ids = [r.case_id for r in kb.records] + list(_load_deleted_case_ids())
+    for case_id in known_ids:
+        if case_id.startswith("USER-"):
             try:
-                nums.append(int(r.case_id.split("-", 1)[1]))
+                nums.append(int(case_id.split("-", 1)[1]))
             except Exception:
                 pass
     return f"USER-{(max(nums) if nums else 0) + 1:03d}"
 
 
 
+CASE_DUPLICATE_FIELDS = [
+    "diagnosis", "sex", "age", "history", "prior_operation", "symptoms", "tumor",
+    "grade", "tnm", "lymph_node", "ls", "immuno", "imaging", "pathology",
+    "surgery", "other_treatment", "recurrence", "followup",
+]
+
+
+def _normalize_case_duplicate_value(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"", "nan", "none", "null", "/", "\\", "未记录", "未填写", "暂无", "待整理病例"}:
+        return ""
+    if re.fullmatch(r"\d+\.0+", text):
+        text = text.split(".", 1)[0]
+    return re.sub(r"[\s,，。；;：:、|/\\()（）\[\]{}<>\-_]+", "", text)
+
+
+def _case_duplicate_payload(fields: Dict[str, Any], source_text: str = "") -> Dict[str, str]:
+    fields = fields if isinstance(fields, dict) else {}
+    raw = {
+        "diagnosis": fields.get("diagnosis") or fields.get("主要诊断") or "",
+        "sex": fields.get("sex") or fields.get("性别") or "",
+        "age": fields.get("age") or fields.get("年龄") or "",
+        "history": fields.get("history") or fields.get("free_text") or source_text or "",
+        "prior_operation": fields.get("prior_operation") or "",
+        "symptoms": fields.get("symptoms") or "",
+        "tumor": fields.get("tumor") or fields.get("tumor_location") or "",
+        "grade": fields.get("grade") or "",
+        "tnm": fields.get("tnm") or "",
+        "lymph_node": fields.get("lymph_node") or "",
+        "ls": fields.get("ls") or "",
+        "immuno": fields.get("immuno") or "",
+        "imaging": fields.get("imaging") or "",
+        "pathology": fields.get("pathology") or fields.get("病理") or "",
+        "surgery": fields.get("surgery") or "",
+        "other_treatment": fields.get("other_treatment") or "",
+        "recurrence": fields.get("recurrence") or "",
+        "followup": fields.get("followup") or "",
+    }
+    return {key: val for key, value in raw.items() if (val := _normalize_case_duplicate_value(value))}
+
+
+def _case_duplicate_fingerprint(fields: Dict[str, Any], source_text: str = "") -> str:
+    payload = _case_duplicate_payload(fields, source_text)
+    # Diagnosis-only rows are not enough to prove that two patients are identical.
+    if len(payload) < 3 and sum(len(v) for v in payload.values()) < 60:
+        return ""
+    normalized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(normalized.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _case_fields_from_record(rec: CaseRecord) -> Dict[str, Any]:
+    return {key: getattr(rec, key, "") for key in CASE_DUPLICATE_FIELDS}
+
+
 def _case_signature_fields(fields: Dict[str, Any], source_text: str = "") -> str:
-    """Create a stable signature for doctor-fed cases, ignoring empty placeholders."""
-    keys = [
-        "name", "姓名", "age", "年龄", "sex", "性别", "diagnosis", "主要诊断",
-        "pathology", "病理", "tnm", "分期", "ls", "history", "symptoms",
-        "surgery", "other_treatment", "followup", "free_text"
-    ]
-    vals = []
-    for k in keys:
-        v = fields.get(k, "") if isinstance(fields, dict) else ""
-        if v is None:
-            continue
-        t = re.sub(r"\s+", "", str(v).strip().lower())
-        if t and t not in {"nan", "none", "null", "/", "未记录", "暂无", "待整理病例"}:
-            vals.append(f"{k}:{t[:1200]}")
-    st = re.sub(r"\s+", "", str(source_text or "").strip().lower())[:2000]
-    if st:
-        vals.append("source:" + st)
-    normalized = "|".join(vals)
-    return hashlib.sha256(normalized.encode("utf-8", errors="ignore")).hexdigest() if normalized else ""
+    """Create a restart-safe signature from fields that are actually persisted."""
+    return _case_duplicate_fingerprint(fields, source_text)
 
 
 def _find_duplicate_case(fields: Dict[str, Any], source_text: str = "") -> CaseRecord | None:
-    sig = _case_signature_fields(fields, source_text)
-    if not sig:
-        return None
-    for rec in kb.records:
-        rec_sig = getattr(rec, "case_signature", "") or ""
-        if rec_sig and rec_sig == sig:
-            return rec
-    compact = re.sub(r"\s+", "", "|".join([
-        str(fields.get("name") or fields.get("姓名") or ""),
-        str(fields.get("age") or fields.get("年龄") or ""),
-        str(fields.get("sex") or fields.get("性别") or ""),
-        str(fields.get("diagnosis") or fields.get("主要诊断") or fields.get("pathology") or ""),
-        str(fields.get("free_text") or source_text or "")[:1200],
-    ]).lower())
-    if len(compact) < 12:
+    fingerprint = _case_duplicate_fingerprint(fields, source_text)
+    if not fingerprint:
         return None
     for rec in kb.records:
         if not _is_user_case(rec):
             continue
-        rec_compact = re.sub(r"\s+", "", "|".join([
-            str(getattr(rec, "name", "") or ""),
-            str(getattr(rec, "age", "") or ""),
-            str(getattr(rec, "sex", "") or ""),
-            str(getattr(rec, "diagnosis", "") or getattr(rec, "pathology", "") or ""),
-            str(getattr(rec, "free_text", "") or getattr(rec, "history", "") or "")[:1200],
-        ]).lower())
-        if rec_compact and rec_compact == compact:
+        if _case_duplicate_fingerprint(_case_fields_from_record(rec)) == fingerprint:
             return rec
     return None
 
@@ -1352,7 +1499,7 @@ def _add_case_from_fields(fields: Dict[str, Any], source_text: str = "") -> Case
         followup=str(fields.get("followup") or ""),
         remarks=str(fields.get("remarks") or "由对话或上传文件加入。"),
         source_row=0,
-        medical_images=fields.get("medical_images") if isinstance(fields.get("medical_images"), list) else [],
+        medical_images=_normalize_medical_images(fields.get("medical_images") or []),
     )
     rec.case_signature = _case_signature_fields(fields, source_text)
     kb.records.append(rec)
@@ -1529,8 +1676,11 @@ def api_storage_status():
         "storage_manifest_path": str(PERSISTENT_DATA_DIR / "storage_manifest.json"),
         "library_state_path": str(LIBRARY_STATE_PATH),
         "knowledge_digest_path": str(KB_DIGEST_PATH),
+        "persistence_repair_log_path": str(PERSISTENCE_REPAIR_LOG_PATH),
         "migration_state_path": str(MIGRATION_STATE_PATH),
         "persistent_data_dir": str(PERSISTENT_DATA_DIR),
+        "uploads_dir": str(UPLOAD_DIR),
+        "upload_files": len([p for p in UPLOAD_DIR.iterdir() if p.is_file()]),
         "user_cases_saved": USER_CASES_PATH.exists(),
         "articles_saved": ARTICLES_PATH.exists(),
         "user_cases": len([r for r in kb.records if _is_user_case(r)]),
@@ -1794,8 +1944,8 @@ def api_delete_cases_bulk():
         deleted.add(cid)
     before = len(kb.records)
     kb.records = [r for r in kb.records if r.case_id not in set(to_delete)]
-    _save_deleted_case_ids(deleted)
     _save_user_cases()
+    _save_deleted_case_ids(deleted)
     return jsonify({"ok": True, "deleted": to_delete, "before": before, "after": len(kb.records), "message": f"已删除 {len(to_delete)} 个病例。"})
 
 
@@ -1848,9 +1998,9 @@ def api_delete_case(case_id):
     kb.records = [r for r in kb.records if r.case_id != case_id]
     deleted = _load_deleted_case_ids()
     deleted.add(case_id)
-    _save_deleted_case_ids(deleted)
     if _is_user_case(target):
         _save_user_cases()
+    _save_deleted_case_ids(deleted)
     return jsonify({"ok": True, "deleted": case_id, "before": before, "after": len(kb.records)})
 
 

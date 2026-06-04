@@ -80,7 +80,6 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
 FLASK_SECRET_KEY=change-this-in-production
 DATA_PATH=data/knowledge_base.xlsx
-USCC_DATA_DIR=.uscc_scc_flask_data
 ```
 
 The app can still run with local rules and knowledge-base retrieval when no API key is configured.
@@ -109,7 +108,7 @@ The app can still run with local rules and knowledge-base retrieval when no API 
 
 - Do not upload identifiable patient information to public GitHub repositories.
 - Do not commit `.env` or API keys.
-- Treat uploaded case files, runtime logs, and generated local data in `USCC_DATA_DIR` as sensitive.
+- Treat uploaded case files, runtime logs, and generated local data as sensitive. By default, user-fed cases and articles are stored in the Windows user directory `~/.uscc_scc_flask_data`.
 - Public demonstrations should use synthetic or fully de-identified cases only.
 - Every output should be reviewed by qualified medical professionals before any real-world interpretation.
 

@@ -46,7 +46,7 @@ bash run_mac_linux.sh
 - Python 3.10 or newer.
 - Internet access for the first dependency installation.
 - Optional API key if AI-generated summaries are needed.
-- Runtime user data is stored in `USCC_DATA_DIR`; the default package setting uses `.uscc_scc_flask_data` inside the app folder.
+- Runtime user data is stored outside the app folder by default at `~/.uscc_scc_flask_data`, so added cases and articles survive app updates.
 
 ## Medical Safety
 

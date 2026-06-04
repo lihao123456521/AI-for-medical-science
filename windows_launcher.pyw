@@ -136,7 +136,6 @@ def start_server(py: Path, port: int) -> subprocess.Popen:
     env = os.environ.copy()
     env.setdefault("HOST", "127.0.0.1")
     env["PORT"] = str(port)
-    env.setdefault("USCC_DATA_DIR", str(BASE_DIR / ".uscc_scc_flask_data"))
     ensure_env_file()
     log_file = LOG_PATH.open("a", encoding="utf-8")
     process = subprocess.Popen(

@@ -4,9 +4,17 @@ UroSCC-LS Risk AI is a Flask-based medical science prototype for case entry, loc
 
 This project is intended for teaching, research discussion, and prototype demonstration. It is not a medical device and must not be used as a diagnosis, staging, treatment, or triage system.
 
+## Download Now
+
+| Windows | macOS | Linux |
+| --- | --- | --- |
+| **[Download Windows ZIP](dist/AI-for-medical-science-windows.zip)** | **[Download macOS TAR.GZ](dist/AI-for-medical-science-macos.tar.gz)** | **[Download Linux TAR.GZ](dist/AI-for-medical-science-linux.tar.gz)** |
+
+Windows users: extract the ZIP and double-click `start_windows_local.bat`. The launcher opens the chat UI automatically and creates a desktop shortcut named `AI罕见病助手`.
+
 ## Promotional Video
 
-[![AI rare disease treatment promotional video](docs/media/promo-poster.jpg)](docs/media/ai-rare-disease-treatment-promo.mp4)
+<video src="docs/media/ai-rare-disease-treatment-promo.mp4" poster="docs/media/promo-poster.jpg" autoplay muted loop playsinline controls width="100%"></video>
 
 Watch the short promotional demo: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo.mp4).
 
@@ -16,7 +24,7 @@ The packages are portable source-based installers. Users need Python 3.10 or new
 
 | System | Download | How to start |
 | --- | --- | --- |
-| Windows | [AI-for-medical-science-windows.zip](dist/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `start_windows_local.bat`; it opens an app-style window automatically |
+| Windows | [AI-for-medical-science-windows.zip](dist/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `start_windows_local.bat`; it opens an app-style window and creates a desktop shortcut automatically |
 | macOS | [AI-for-medical-science-macos.tar.gz](dist/AI-for-medical-science-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
 | Linux | [AI-for-medical-science-linux.tar.gz](dist/AI-for-medical-science-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
 

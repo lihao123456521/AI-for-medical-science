@@ -19,6 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent
 LOG_PATH = BASE_DIR / "launcher.log"
 DEFAULT_PORT = 5000
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+ICON_PATH = BASE_DIR / "static" / "assets" / "app_icon.ico"
 
 
 def log(message: str) -> None:
@@ -55,6 +56,23 @@ def find_base_python() -> Path:
     return current
 
 
+def find_pythonw() -> Path:
+    current = Path(sys.executable)
+    if current.name.lower() == "pythonw.exe":
+        return current
+    sibling = current.with_name("pythonw.exe")
+    if sibling.exists():
+        return sibling
+    candidates = [
+        Path(r"D:\anaconda\pythonw.exe"),
+        Path(os.environ.get("SystemRoot", r"C:\Windows")) / "pyw.exe",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return current
+
+
 def venv_python() -> Path:
     return BASE_DIR / ".venv" / "Scripts" / "python.exe"
 
@@ -65,6 +83,40 @@ def ensure_env_file() -> None:
     if not env_path.exists() and example_path.exists():
         shutil.copy2(example_path, env_path)
         log("Created .env from .env.example")
+
+
+def ensure_desktop_shortcut() -> None:
+    if os.name != "nt":
+        return
+    desktop = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
+    if not desktop.exists():
+        return
+    shortcut = desktop / "AI罕见病助手.lnk"
+    target = find_pythonw()
+    arguments = f'"{BASE_DIR / "windows_launcher.pyw"}"'
+    icon = str(ICON_PATH if ICON_PATH.exists() else target)
+    ps = (
+        "$shell=New-Object -ComObject WScript.Shell;"
+        f"$lnk=$shell.CreateShortcut('{shortcut}');"
+        f"$lnk.TargetPath='{target}';"
+        f"$lnk.Arguments='{arguments}';"
+        f"$lnk.WorkingDirectory='{BASE_DIR}';"
+        "$lnk.Description='AI罕见病助手';"
+        f"$lnk.IconLocation='{icon},0';"
+        "$lnk.WindowStyle=1;"
+        "$lnk.Save();"
+    )
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW,
+            check=False,
+        )
+        log("Ensured desktop shortcut: " + str(shortcut))
+    except Exception as exc:
+        log("Desktop shortcut skipped: " + repr(exc))
 
 
 def ensure_virtualenv(status: StringVar) -> Path:
@@ -198,6 +250,7 @@ def launch(status: StringVar, root: Tk) -> None:
     try:
         LOG_PATH.write_text("", encoding="utf-8")
         status.set("正在准备启动...")
+        ensure_desktop_shortcut()
         py = ensure_virtualenv(status)
         ensure_dependencies(py, status)
         port = choose_port()

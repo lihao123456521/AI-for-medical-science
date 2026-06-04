@@ -14,11 +14,13 @@ Windows users: extract the ZIP and double-click `start_windows_local.bat`. The l
 
 ## Promotional Video
 
-<video src="docs/media/ai-rare-disease-treatment-promo.mp4" poster="docs/media/promo-poster.jpg" autoplay muted loop playsinline controls preload="auto" width="100%">
-  <a href="docs/media/ai-rare-disease-treatment-promo.mp4">Play the promotional video</a>
+![AI rare disease treatment promotional preview](docs/media/ai-rare-disease-treatment-promo-preview.gif)
+
+<video src="docs/media/ai-rare-disease-treatment-promo-small.mp4" poster="docs/media/promo-poster.jpg" autoplay muted loop playsinline controls preload="auto" width="100%">
+  <a href="docs/media/ai-rare-disease-treatment-promo-small.mp4">Play the promotional video</a>
 </video>
 
-If your browser blocks autoplay, open the short promotional demo here: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo.mp4).
+If your browser blocks video playback, open the compressed demo here: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo-small.mp4).
 
 ## Download Packages
 

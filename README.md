@@ -10,13 +10,15 @@ This project is intended for teaching, research discussion, and prototype demons
 | --- | --- | --- |
 | **[Download Windows ZIP](dist/AI-for-medical-science-windows.zip)** | **[Download macOS TAR.GZ](dist/AI-for-medical-science-macos.tar.gz)** | **[Download Linux TAR.GZ](dist/AI-for-medical-science-linux.tar.gz)** |
 
-Windows users: extract the ZIP and double-click `start_windows_local.bat`. The launcher opens the chat UI automatically and creates a desktop shortcut named `AI罕见病助手`.
+Windows users: extract the ZIP and double-click `start_windows_local.bat`. The launcher opens the chat UI automatically and creates a desktop shortcut with the themed doctor-patient app icon.
 
 ## Promotional Video
 
-<video src="docs/media/ai-rare-disease-treatment-promo.mp4" poster="docs/media/promo-poster.jpg" autoplay muted loop playsinline controls width="100%"></video>
+<video src="docs/media/ai-rare-disease-treatment-promo.mp4" poster="docs/media/promo-poster.jpg" autoplay muted loop playsinline controls preload="auto" width="100%">
+  <a href="docs/media/ai-rare-disease-treatment-promo.mp4">Play the promotional video</a>
+</video>
 
-Watch the short promotional demo: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo.mp4).
+If your browser blocks autoplay, open the short promotional demo here: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo.mp4).
 
 ## Download Packages
 
@@ -33,6 +35,10 @@ After startup, open:
 ```text
 http://127.0.0.1:5000
 ```
+
+## More Notes
+
+Older version notes, release notes, deployment notes, and security notes are collected in [docs/notes](docs/notes/README.md) so the project root stays clean.
 
 ## What It Does
 
@@ -96,20 +102,22 @@ The app can still run with local rules and knowledge-base retrieval when no API 
 
 ```text
 .
-├── app.py
-├── core/
-│   ├── case_parser.py
-│   ├── data_loader.py
-│   ├── llm_client.py
-│   └── risk_engine.py
-├── data/
-│   ├── knowledge_base.xlsx
-│   └── knowledge_base_manifest.json
-├── static/
-├── templates/
-├── scripts/
-├── docs/media/
-└── dist/
+|-- app.py
+|-- core/
+|   |-- case_parser.py
+|   |-- data_loader.py
+|   |-- llm_client.py
+|   `-- risk_engine.py
+|-- data/
+|   |-- knowledge_base.xlsx
+|   `-- knowledge_base_manifest.json
+|-- static/
+|-- templates/
+|-- scripts/
+|-- docs/
+|   |-- media/
+|   `-- notes/
+`-- dist/
 ```
 
 ## Security And Data Notes

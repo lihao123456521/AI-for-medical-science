@@ -22,6 +22,17 @@ CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 ICON_PATH = BASE_DIR / "static" / "assets" / "app_icon.ico"
 
 
+def set_app_user_model_id() -> None:
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AI.RareDisease.Assistant")
+    except Exception as exc:
+        log("AppUserModelID skipped: " + repr(exc))
+
+
 def log(message: str) -> None:
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     with LOG_PATH.open("a", encoding="utf-8") as f:
@@ -276,8 +287,14 @@ def main() -> None:
         print(f"venv_python={venv_python()}")
         return
 
+    set_app_user_model_id()
     root = Tk()
     root.title(APP_TITLE)
+    if ICON_PATH.exists():
+        try:
+            root.iconbitmap(str(ICON_PATH))
+        except Exception as exc:
+            log("Window icon skipped: " + repr(exc))
     root.geometry("420x150")
     root.resizable(False, False)
     status = StringVar(value="正在启动...")

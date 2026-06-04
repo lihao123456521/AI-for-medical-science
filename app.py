@@ -1540,6 +1540,11 @@ def index():
     return render_template("index.html")
 
 
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory(BASE_DIR / "static" / "assets", "app_icon.ico", mimetype="image/vnd.microsoft.icon")
+
+
 @app.get("/knowledge")
 def knowledge():
     return render_template("knowledge.html")

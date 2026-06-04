@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="{{ url_for('favicon') }}" />
+  <link rel="shortcut icon" href="{{ url_for('favicon') }}" />
   <title>{{ article.title or article.article_id }} 文献详情</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui27" />
 </head>

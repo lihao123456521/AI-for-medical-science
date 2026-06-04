@@ -4,6 +4,7 @@ __pycache__/
 .env
 .DS_Store
 .package-build/
+launcher.log
 
 # Runtime data and uploads may contain sensitive medical information.
 uploads/*

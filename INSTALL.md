@@ -5,13 +5,15 @@
 1. Download `AI-for-medical-science-windows.zip`.
 2. Extract the zip file.
 3. Double-click `start_windows_local.bat`.
-4. Open `http://127.0.0.1:5000` in your browser.
+4. The launcher opens the app window automatically; no manual URL entry is needed.
 
 If Windows blocks script execution, open PowerShell in the extracted folder and run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_windows.ps1
 ```
+
+The Windows launcher is `windows_launcher.pyw`. It creates or reuses `.venv`, installs dependencies if needed, starts the local Flask service, waits for `/healthz`, and opens the chat interface in an app-style browser window.
 
 ## macOS
 

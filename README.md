@@ -16,7 +16,7 @@ The packages are portable source-based installers. Users need Python 3.10 or new
 
 | System | Download | How to start |
 | --- | --- | --- |
-| Windows | [AI-for-medical-science-windows.zip](dist/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `start_windows_local.bat` |
+| Windows | [AI-for-medical-science-windows.zip](dist/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `start_windows_local.bat`; it opens an app-style window automatically |
 | macOS | [AI-for-medical-science-macos.tar.gz](dist/AI-for-medical-science-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
 | Linux | [AI-for-medical-science-linux.tar.gz](dist/AI-for-medical-science-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
 
@@ -52,6 +52,8 @@ Or double-click:
 ```text
 start_windows_local.bat
 ```
+
+On Windows, `windows_launcher.pyw` starts the local Flask service, waits until it is healthy, and then opens the chat UI in an Edge/Chrome app-style window.
 
 ### macOS / Linux
 

@@ -8,9 +8,9 @@ This project is intended for teaching, research discussion, and prototype demons
 
 | Windows | macOS | Linux |
 | --- | --- | --- |
-| **[Download Windows ZIP](dist/AI-for-medical-science-windows.zip)** | **[Download macOS TAR.GZ](dist/AI-for-medical-science-macos.tar.gz)** | **[Download Linux TAR.GZ](dist/AI-for-medical-science-linux.tar.gz)** |
+| **[Download Windows ZIP](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-windows.zip)** | **[Download macOS TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-macos.tar.gz)** | **[Download Linux TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-linux.tar.gz)** |
 
-Windows users: extract the ZIP and double-click `start_windows_local.bat`. The launcher opens the chat UI automatically and creates a desktop shortcut with the themed doctor-patient app icon.
+Windows users: extract the ZIP and double-click `AI-rare-disease-assistant.exe`. The launcher opens the chat UI automatically and creates a desktop shortcut with the themed doctor-patient app icon. `start_windows_local.bat` is kept as a fallback.
 
 ## Promotional Video
 
@@ -28,9 +28,9 @@ The packages are portable source-based installers. Users need Python 3.10 or new
 
 | System | Download | How to start |
 | --- | --- | --- |
-| Windows | [AI-for-medical-science-windows.zip](dist/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `start_windows_local.bat`; it opens an app-style window and creates a desktop shortcut automatically |
-| macOS | [AI-for-medical-science-macos.tar.gz](dist/AI-for-medical-science-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
-| Linux | [AI-for-medical-science-linux.tar.gz](dist/AI-for-medical-science-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
+| Windows | [AI-for-medical-science-windows.zip](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `AI-rare-disease-assistant.exe`; it opens an app-style window and creates a desktop shortcut automatically |
+| macOS | [AI-for-medical-science-macos.tar.gz](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
+| Linux | [AI-for-medical-science-linux.tar.gz](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
 
 After startup, open:
 

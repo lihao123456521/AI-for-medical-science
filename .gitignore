@@ -5,6 +5,9 @@ __pycache__/
 .DS_Store
 .package-build/
 launcher.log
+dist/*.zip
+dist/*.tar.gz
+dist/*.exe
 
 # Runtime data and uploads may contain sensitive medical information.
 uploads/*

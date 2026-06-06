@@ -11,7 +11,8 @@ import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
-from tkinter import Tk, Label, Button, StringVar, messagebox
+from tkinter import Tk, Label, Button, StringVar, messagebox, Canvas, PhotoImage
+from tkinter import ttk
 
 
 APP_TITLE = "AI罕见病助手"
@@ -20,6 +21,12 @@ LOG_PATH = BASE_DIR / "launcher.log"
 DEFAULT_PORT = 5000
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 ICON_PATH = BASE_DIR / "static" / "assets" / "app_icon.ico"
+ICON_PNG_PATH = BASE_DIR / "static" / "assets" / "app_icon.png"
+BG_COLOR = "#eef7f6"
+CARD_COLOR = "#ffffff"
+TEXT_COLOR = "#163331"
+MUTED_COLOR = "#5f7774"
+ACCENT_COLOR = "#22a699"
 
 
 def set_app_user_model_id() -> None:
@@ -280,6 +287,69 @@ def launch(status: StringVar, root: Tk) -> None:
         messagebox.showerror(APP_TITLE, f"{exc}\n\n日志文件：{LOG_PATH}")
 
 
+def center_window(root: Tk, width: int, height: int) -> None:
+    root.update_idletasks()
+    x = max(0, (root.winfo_screenwidth() - width) // 2)
+    y = max(0, (root.winfo_screenheight() - height) // 2)
+    root.geometry(f"{width}x{height}+{x}+{y}")
+
+
+def build_splash(root: Tk, status: StringVar) -> None:
+    root.configure(bg=BG_COLOR)
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except Exception:
+        pass
+    style.configure(
+        "Splash.Horizontal.TProgressbar",
+        troughcolor="#d9eeeb",
+        background=ACCENT_COLOR,
+        bordercolor="#d9eeeb",
+        lightcolor=ACCENT_COLOR,
+        darkcolor=ACCENT_COLOR,
+    )
+
+    shadow = Canvas(root, width=456, height=236, bg=BG_COLOR, highlightthickness=0)
+    shadow.place(x=24, y=26)
+    shadow.create_rectangle(8, 8, 448, 228, fill="#dcece9", outline="")
+
+    card = Canvas(root, width=456, height=236, bg=BG_COLOR, highlightthickness=0)
+    card.place(x=18, y=18)
+    card.create_rectangle(0, 0, 456, 236, fill=CARD_COLOR, outline="#d8ebe7")
+    card.create_rectangle(0, 0, 456, 8, fill=ACCENT_COLOR, outline=ACCENT_COLOR)
+    card.create_oval(332, -36, 476, 108, fill="#dff6f3", outline="")
+    card.create_oval(378, 116, 500, 238, fill="#ffe9df", outline="")
+
+    root._splash_icon = None
+    if ICON_PNG_PATH.exists():
+        try:
+            root._splash_icon = PhotoImage(file=str(ICON_PNG_PATH)).subsample(18, 18)
+            Label(root, image=root._splash_icon, bg=CARD_COLOR).place(x=50, y=54)
+        except Exception as exc:
+            log("Splash image skipped: " + repr(exc))
+
+    Label(root, text=APP_TITLE, bg=CARD_COLOR, fg=TEXT_COLOR, font=("Microsoft YaHei UI", 18, "bold")).place(x=128, y=54)
+    Label(root, text="Preparing your local medical assistant", bg=CARD_COLOR, fg=MUTED_COLOR, font=("Microsoft YaHei UI", 10)).place(x=130, y=88)
+    Label(root, textvariable=status, bg=CARD_COLOR, fg=TEXT_COLOR, font=("Microsoft YaHei UI", 10, "bold")).place(x=50, y=144)
+
+    progress = ttk.Progressbar(root, mode="indeterminate", length=356, style="Splash.Horizontal.TProgressbar")
+    progress.place(x=50, y=176)
+    progress.start(12)
+
+    Button(
+        root,
+        text="Cancel",
+        command=root.destroy,
+        width=8,
+        relief="flat",
+        bg="#eef7f6",
+        fg=TEXT_COLOR,
+        activebackground="#dff6f3",
+        activeforeground=TEXT_COLOR,
+    ).place(x=368, y=204)
+
+
 def main() -> None:
     if "--check" in sys.argv:
         print(f"base_dir={BASE_DIR}")
@@ -295,12 +365,10 @@ def main() -> None:
             root.iconbitmap(str(ICON_PATH))
         except Exception as exc:
             log("Window icon skipped: " + repr(exc))
-    root.geometry("420x150")
+    center_window(root, 492, 274)
     root.resizable(False, False)
     status = StringVar(value="正在启动...")
-    Label(root, text=APP_TITLE, font=("Microsoft YaHei UI", 15, "bold")).pack(pady=(22, 8))
-    Label(root, textvariable=status, font=("Microsoft YaHei UI", 10)).pack(pady=(0, 18))
-    Button(root, text="关闭", command=root.destroy, width=10).pack()
+    build_splash(root, status)
     threading.Thread(target=launch, args=(status, root), daemon=True).start()
     root.mainloop()
 

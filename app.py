@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, abort, send_from_directory
 from werkzeug.utils import secure_filename
 
-from core.data_loader import KnowledgeBase, CaseRecord
+from core.data_loader import KnowledgeBase, CaseRecord, case_sort_key
 from core.risk_engine import generate_traceable_report
 from core.llm_client import ask_llm, test_llm_connection
 from core.case_parser import parse_case_file
@@ -120,6 +120,25 @@ def _normalize_medical_images(images: Any) -> List[Dict[str, Any]]:
             "url": url,
         })
     return normalized
+
+
+def _normalize_source_pages(pages: Any) -> List[int]:
+    normalized: List[int] = []
+    for value in pages if isinstance(pages, list) else []:
+        try:
+            page = int(value)
+        except (TypeError, ValueError):
+            continue
+        if page > 0 and page not in normalized:
+            normalized.append(page)
+    return sorted(normalized)
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if str(value or "").strip() else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _case_matches_query(rec: CaseRecord, query: str) -> bool:
@@ -1348,6 +1367,13 @@ def _load_user_cases() -> None:
                 remarks=str(row.get("remarks") or ""),
                 source_row=int(row.get("source_row") or 0),
                 medical_images=_normalize_medical_images(row.get("medical_images") or []),
+                patient_name=str(row.get("patient_name") or ""),
+                source_case_number=_optional_int(row.get("source_case_number")),
+                source_document=str(row.get("source_document") or ""),
+                source_pages=_normalize_source_pages(row.get("source_pages") or []),
+                source_hash=str(row.get("source_hash") or ""),
+                source_import_key=str(row.get("source_import_key") or ""),
+                imaging_findings=[dict(x) for x in (row.get("imaging_findings") or []) if isinstance(x, dict)],
             )
             rec.case_signature = str(row.get("case_signature") or "")
             kb.records.append(rec)
@@ -1500,6 +1526,13 @@ def _add_case_from_fields(fields: Dict[str, Any], source_text: str = "") -> Case
         remarks=str(fields.get("remarks") or "由对话或上传文件加入。"),
         source_row=0,
         medical_images=_normalize_medical_images(fields.get("medical_images") or []),
+        patient_name=str(fields.get("patient_name") or fields.get("name") or fields.get("姓名") or ""),
+        source_case_number=_optional_int(fields.get("source_case_number")),
+        source_document=str(fields.get("source_document") or ""),
+        source_pages=_normalize_source_pages(fields.get("source_pages") or []),
+        source_hash=str(fields.get("source_hash") or ""),
+        source_import_key=str(fields.get("source_import_key") or ""),
+        imaging_findings=[dict(x) for x in (fields.get("imaging_findings") or []) if isinstance(x, dict)],
     )
     rec.case_signature = _case_signature_fields(fields, source_text)
     kb.records.append(rec)
@@ -1617,6 +1650,7 @@ def api_cases():
     records = [r for r in kb.records if sheet is None or r.sheet == sheet]
     if q:
         records = [r for r in records if _case_matches_query(r, q)]
+    records = sorted(records, key=case_sort_key)
     cases = [_case_to_public_dict(r) for r in records[:limit]]
     return jsonify({"ok": True, "cases": cases, "total": len(records), "query": q, "sheet": sheet or ""})
 

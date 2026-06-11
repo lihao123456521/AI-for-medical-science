@@ -23,6 +23,17 @@
           <button class="case-delete-btn" id="deleteCaseBtn">删除病例</button>
         </div>
       </div>
+      {% if case.source_document or case.source_case_number or case.source_pages %}
+        <section class="case-field wide-field">
+          <b>来源信息</b>
+          <p>
+            {% if case.patient_name %}姓名：{{ case.patient_name }}；{% endif %}
+            {% if case.source_case_number %}原资料编号：{{ case.source_case_number }}；{% endif %}
+            {% if case.source_document %}来源：{{ case.source_document }}；{% endif %}
+            {% if case.source_pages %}页码：{{ case.source_pages|join('、') }}{% endif %}
+          </p>
+        </section>
+      {% endif %}
       {% if case.medical_images %}
         <section class="case-field wide-field medical-image-section">
           <b>医学影像/病理图像</b>
@@ -33,10 +44,20 @@
                   <img src="{{ img.url }}" alt="{{ img.filename }}" />
                 {% endif %}
                 <span>{{ img.filename }}</span>
+                {% if img.source_page %}<small>来源页：{{ img.source_page }}</small>{% endif %}
+                {% if img.physician_annotation %}<small>原资料标注：{{ img.physician_annotation }}</small>{% endif %}
                 {% if img.note %}<small>{{ img.note }}</small>{% endif %}
               </a>
             {% endfor %}
           </div>
+        </section>
+      {% endif %}
+      {% if case.imaging_findings %}
+        <section class="case-field wide-field">
+          <b>结构化影像所见</b>
+          {% for finding in case.imaging_findings %}
+            <p>{% if finding.date %}{{ finding.date }}：{% endif %}{{ finding.text or finding.annotation }}</p>
+          {% endfor %}
         </section>
       {% endif %}
       <div class="case-grid">

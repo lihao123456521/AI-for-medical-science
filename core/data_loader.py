@@ -106,6 +106,13 @@ class CaseRecord:
     remarks: str
     source_row: int
     medical_images: List[Dict[str, Any]] = field(default_factory=list)
+    patient_name: str = ""
+    source_case_number: Optional[int] = None
+    source_document: str = ""
+    source_pages: List[int] = field(default_factory=list)
+    source_hash: str = ""
+    source_import_key: str = ""
+    imaging_findings: List[Dict[str, Any]] = field(default_factory=list)
 
     def as_public_dict(self) -> Dict[str, Any]:
         return {
@@ -132,6 +139,13 @@ class CaseRecord:
             "remarks": self.remarks,
             "source_row": self.source_row,
             "medical_images": self.medical_images or [],
+            "patient_name": self.patient_name,
+            "source_case_number": self.source_case_number,
+            "source_document": self.source_document,
+            "source_pages": self.source_pages or [],
+            "source_hash": self.source_hash,
+            "source_import_key": self.source_import_key,
+            "imaging_findings": self.imaging_findings or [],
         }
 
     @property
@@ -141,9 +155,20 @@ class CaseRecord:
             self.prior_operation, self.symptoms, self.tumor, self.grade, self.tnm,
             self.lymph_node, self.ls, self.immuno, self.imaging, self.pathology,
             self.surgery, self.other_treatment, self.recurrence, self.followup, self.remarks,
+            self.patient_name, self.source_document, str(self.source_case_number or ""),
+            " ".join(str(x) for x in (self.source_pages or [])),
+            " ".join(str(x.get("text", "")) + " " + str(x.get("annotation", "")) for x in (self.imaging_findings or []) if isinstance(x, dict)),
             " ".join(str(x.get("filename", "")) + " " + str(x.get("note", "")) for x in (self.medical_images or []) if isinstance(x, dict)),
         ]
         return "\n".join([p for p in parts if p])
+
+
+def case_sort_key(rec: CaseRecord) -> tuple[Any, ...]:
+    source_document = str(getattr(rec, "source_document", "") or "")
+    source_number = getattr(rec, "source_case_number", None)
+    if source_document and isinstance(source_number, int):
+        return (0, source_document, source_number, rec.case_id)
+    return (1, "", 10**9, rec.case_id)
 
 
 class KnowledgeBase:

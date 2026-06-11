@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -75,6 +77,19 @@ class ImagingImportTests(unittest.TestCase):
         self.assertEqual(json.loads((backup / "user_cases.json").read_text(encoding="utf-8"))[0]["case_id"], "USER-001")
         self.assertEqual(len(json.loads((backup / "articles.json").read_text(encoding="utf-8"))), 230)
         self.assertTrue((backup / "library_state.json").exists())
+
+    def test_import_script_can_be_run_directly(self):
+        project_root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [sys.executable, str(project_root / "scripts" / "import_imaging_pdf_cases.py"), "--help"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("usage:", result.stdout.lower())
 
 
 if __name__ == "__main__":

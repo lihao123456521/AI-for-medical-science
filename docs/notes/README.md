@@ -4,6 +4,7 @@ This folder keeps supporting markdown files out of the repository root.
 
 - Chat UI version notes: `README_CHATGPT_UI_V*.md`
 - Version change logs: `README_V*_CHANGES.md`
+- Current annotated imaging import and reliability notes: `README_V37_CHANGES.md`
 - Deployment and upload notes
 - Release, fix, security, and data-policy notes
 

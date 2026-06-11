@@ -45,11 +45,14 @@ Older version notes, release notes, deployment notes, and security notes are col
 ## What It Does
 
 - Structured case entry for symptoms, imaging, pathology, immunohistochemistry, and clinical notes.
+- Number-aware multi-case document splitting with PDF image-to-case ownership and annotation retention.
 - Local knowledge-base search from `data/knowledge_base.xlsx`.
 - Transparent risk-factor extraction and rule-based scoring.
-- Similar-case retrieval and case discussion support.
+- Similar-case retrieval only after a detailed case is confirmed or explicitly requested.
 - Optional OpenAI-compatible API integration for explanatory summaries.
 - Upload parsing for Excel, CSV, Word, text, PDF, and image attachments.
+
+The June 2026 imaging import added 17 annotated cases from `影像片子汇总.pdf` while preserving the existing 76 user cases and 230 articles. See [the V37 change notes](docs/notes/README_V37_CHANGES.md) for import, chat-routing, and API-request details.
 
 ## Quick Start From Source
 
@@ -99,6 +102,8 @@ DATA_PATH=data/knowledge_base.xlsx
 ```
 
 The app can still run with local rules and knowledge-base retrieval when no API key is configured.
+
+API calls use bounded output lengths, provider-aware timeouts, streaming where supported, and no automatic SDK retries. A timeout message includes a request ID and warns that the provider may already have accepted the request, so users can check provider records before sending it again.
 
 ## Repository Structure
 

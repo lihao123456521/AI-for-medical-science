@@ -7,6 +7,8 @@ import re
 
 import pandas as pd
 
+from core.case_document import extract_pdf_case_segments, segment_numbered_cases
+
 FIELD_ALIASES: Dict[str, List[str]] = {
     "sex": ["性别", "sex", "gender", "患者性别"],
     "age": ["年龄", "年龄（岁）", "年龄(岁)", "age", "患者年龄"],
@@ -280,14 +282,61 @@ def parse_pdf(path: Path) -> Tuple[Dict[str, str], List[str]]:
 
 def parse_case_file(path: Path) -> Dict[str, Any]:
     suffix = path.suffix.lower()
+    numbered_cases: List[Dict[str, Any]] = []
     if suffix in {".xlsx", ".xls", ".csv"}:
         fields, notes = parse_excel(path)
     elif suffix == ".docx":
         fields, notes = parse_docx(path)
+        try:
+            from docx import Document
+            document = Document(str(path))
+            source_text = "\n".join(
+                [p.text for p in document.paragraphs if p.text.strip()]
+                + ["\t".join(cell.text for cell in row.cells) for table in document.tables for row in table.rows]
+            )
+            numbered_cases = [
+                {
+                    "source_case_number": row.source_case_number,
+                    "patient_name": row.patient_name,
+                    "free_text": row.text,
+                    "imaging": row.text,
+                    "source_pages": [],
+                    "medical_images": [],
+                }
+                for row in segment_numbered_cases(source_text)
+            ]
+        except Exception:
+            numbered_cases = []
     elif suffix == ".pdf":
         fields, notes = parse_pdf(path)
+        try:
+            numbered_cases = [
+                {
+                    "source_case_number": row.source_case_number,
+                    "patient_name": row.patient_name,
+                    "free_text": row.text,
+                    "imaging": row.text,
+                    "source_pages": row.pages,
+                    "medical_images": row.images,
+                }
+                for row in extract_pdf_case_segments(path)
+            ]
+        except Exception:
+            numbered_cases = []
     elif suffix in {".txt", ".md"}:
         fields, notes = parse_txt(path)
+        source_text = path.read_text(encoding="utf-8", errors="ignore")
+        numbered_cases = [
+            {
+                "source_case_number": row.source_case_number,
+                "patient_name": row.patient_name,
+                "free_text": row.text,
+                "imaging": row.text,
+                "source_pages": [],
+                "medical_images": [],
+            }
+            for row in segment_numbered_cases(source_text)
+        ]
     elif suffix == ".doc":
         return {
             "ok": False,
@@ -318,4 +367,5 @@ def parse_case_file(path: Path) -> Dict[str, Any]:
         "fields": fields,
         "notes": notes or ["文件已读取，但未识别到明确字段标签；已尝试从自由文本中抽取。"],
         "field_count": len([v for v in fields.values() if v]),
+        "cases": numbered_cases,
     }

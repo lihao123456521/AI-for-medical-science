@@ -1273,7 +1273,14 @@ def _extract_case_batch_candidates(path: Path, original_name: str, max_rows: int
             _dataframe_candidates_from_sheet(df, original_name, batch_id, candidates, max_rows)
         elif suffix in {".docx", ".pdf", ".txt", ".md"}:
             parsed = parse_case_file(path)
-            if parsed.get("ok") and parsed.get("fields"):
+            numbered_cases = parsed.get("cases") or []
+            if numbered_cases:
+                for fields in numbered_cases[: max_rows - len(candidates)]:
+                    fields = dict(fields)
+                    fields.update({"batch_id": batch_id, "candidate_id": f"{batch_id}-{len(candidates)+1:04d}", "row_index": len(candidates), "source_file": original_name})
+                    fields["display_title"] = "｜".join([x for x in [fields.get("source_case_number") and f"原编号{fields.get('source_case_number')}", fields.get("patient_name"), fields.get("diagnosis") or fields.get("pathology")] if x])[:120] or Path(original_name).stem
+                    candidates.append(_json_safe(fields))
+            elif parsed.get("ok") and parsed.get("fields"):
                 fields = parsed.get("fields") or {}
                 fields.update({"batch_id": batch_id, "candidate_id": f"{batch_id}-0001", "row_index": 0, "source_file": original_name})
                 fields["display_title"] = "｜".join([x for x in [fields.get("age") and str(fields.get("age"))+"岁", fields.get("sex"), fields.get("diagnosis") or fields.get("pathology")] if x])[:120] or Path(original_name).stem

@@ -1,6 +1,9 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from core.case_document import assign_layout_events, segment_numbered_cases
+from core.case_parser import parse_case_file
 
 
 class NumberedCaseSegmentationTests(unittest.TestCase):
@@ -52,6 +55,16 @@ CT报告"""
         owned = assign_layout_events(events)
 
         self.assertEqual([(row["page"], row["xref"]) for row in owned[14]["images"]], [(17, 50), (19, 50)])
+
+    def test_text_case_file_returns_all_numbered_candidates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "cases.txt"
+            path.write_text("1.姓名：甲\nCT：尿道肿块\n2.姓名：乙\nMRI：淋巴结肿大", encoding="utf-8")
+
+            parsed = parse_case_file(path)
+
+        self.assertEqual([row["source_case_number"] for row in parsed["cases"]], [1, 2])
+        self.assertEqual(parsed["cases"][1]["patient_name"], "乙")
 
 
 if __name__ == "__main__":

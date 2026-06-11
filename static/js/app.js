@@ -65,6 +65,21 @@ function normalizeBackendMessage(text) {
   return raw;
 }
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 105000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error('等待后台模型超时。该请求可能已被供应商接收，请先核对供应商后台记录，不要立即重复发送。');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function renderAssistantText(text) {
   let html = escapeHtml(normalizeBackendMessage(text || ''));
   // 保留模型输出中的加粗语义，但不再使用红色重点标记。
@@ -274,7 +289,7 @@ async function analyzeSelectedCandidate(c) {
   const chat = currentChat();
   const typing = addMessage('assistant', '已选择该患者，正在检索病例、文献并生成初步分析……');
   try {
-    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    const res = await fetchWithTimeout('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
       question: '请基于医生已选择的患者进行总体分析，检索相似病例和可参考文献，并给出下一步讨论方向。',
       mode: 'initial_patient_analysis',
       patient: chat.patient || {},
@@ -282,7 +297,7 @@ async function analyzeSelectedCandidate(c) {
       history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
-    })});
+    })}, 105000);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '后端返回错误');
     let answerText = normalizeBackendMessage(data.llm?.answer || '系统没有生成回答。');
@@ -373,14 +388,14 @@ async function sendMessage() {
   const typing = addMessage('assistant', '正在理解问题并调用后台 AI 生成回答……');
   els.sendBtn.disabled = true;
   try {
-    const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    const res = await fetchWithTimeout('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
       question: text,
       patient: chat.patient || {},
       has_confirmed_case: Boolean(chat.caseConfirmed),
       history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
-    })});
+    })}, 105000);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '后端返回错误');
     const hasCandidateBatch = (chat.attachments || []).some(a => a.type === 'candidate_case_batch');
@@ -658,7 +673,7 @@ async function testApiConnection() {
   if (!cfg.model) { els.apiKeyStatus.textContent = '请先选择或填写模型。'; return false; }
   els.apiKeyStatus.textContent = '正在联系后台并测试供应商接口...';
   try {
-    const res = await fetch('/api/llm/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+    const res = await fetchWithTimeout('/api/llm/test', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)}, 35000);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '连接失败');
     els.apiKeyStatus.textContent = `连接成功：${data.provider} / ${data.model}`;
@@ -678,7 +693,7 @@ async function saveApiConfig() {
   els.apiKeyStatus.textContent = cfg.api_key ? `正在保存到本地 Flask 后端并测试 ${cfg.provider}...` : `未填写 Key，仅保存浏览器模型配置。`;
   if (!cfg.api_key) return;
   try {
-    const res = await fetch('/api/llm/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)});
+    const res = await fetchWithTimeout('/api/llm/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)}, 35000);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '后端保存失败');
     if (data.test?.ok) els.apiKeyStatus.textContent = `后端连接成功：${data.test.provider} / ${data.test.model}，已保存到历史配置。`;

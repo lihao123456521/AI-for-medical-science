@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List
 import base64
 import json
@@ -9,6 +10,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 import re
+import uuid
 
 SYSTEM_INSTRUCTIONS = """
 你是泌尿外科科研项目中的男性尿道鳞状细胞癌（SCC）病例问答与知识库检索助手。
@@ -25,6 +27,34 @@ SYSTEM_INSTRUCTIONS = """
 10. 不要在普通回答中反复插入候选患者选择；候选患者只由前端在需要确认时显示。
 11. 不要无视医生的具体提问而固定套用病例分析模板。
 """.strip()
+
+
+@dataclass(frozen=True)
+class RequestPolicy:
+    connect_timeout: float
+    read_timeout: float
+    write_timeout: float
+    pool_timeout: float
+    max_retries: int
+    max_output_tokens: int
+    stream: bool
+
+
+def build_request_policy(provider: str, mode: str) -> RequestPolicy:
+    provider_name = str(provider or "openai").strip().lower()
+    mode_name = str(mode or "general").strip().lower()
+    if mode_name == "connection_test":
+        return RequestPolicy(8.0, 20.0, 15.0, 8.0, 0, 24, False)
+    slower_compatible = {"deepseek", "openrouter", "fourrouter", "custom", "siliconflow", "volcengine"}
+    return RequestPolicy(
+        connect_timeout=10.0,
+        read_timeout=90.0 if provider_name in slower_compatible else 75.0,
+        write_timeout=30.0,
+        pool_timeout=10.0,
+        max_retries=0,
+        max_output_tokens=900 if mode_name == "initial_patient_analysis" else 600,
+        stream=provider_name != "anthropic",
+    )
 
 
 
@@ -174,6 +204,42 @@ def _plain_text_from_chat_completion(response: Any) -> str:
         return str(response)
 
 
+def _plain_text_from_chat_stream(stream: Any) -> str:
+    parts: List[str] = []
+    for chunk in stream:
+        try:
+            delta = chunk.choices[0].delta.content
+        except Exception:
+            delta = None
+        if isinstance(delta, str):
+            parts.append(delta)
+        elif isinstance(delta, list):
+            for item in delta:
+                if isinstance(item, dict) and item.get("text"):
+                    parts.append(str(item["text"]))
+                elif getattr(item, "text", None):
+                    parts.append(str(item.text))
+    return "".join(parts)
+
+
+def _openai_client_kwargs(api_key: str, base_url: str, policy: RequestPolicy) -> Dict[str, Any]:
+    import httpx
+
+    kwargs: Dict[str, Any] = {
+        "api_key": api_key,
+        "timeout": httpx.Timeout(
+            connect=policy.connect_timeout,
+            read=policy.read_timeout,
+            write=policy.write_timeout,
+            pool=policy.pool_timeout,
+        ),
+        "max_retries": policy.max_retries,
+    }
+    if base_url:
+        kwargs["base_url"] = base_url
+    return kwargs
+
+
 def _provider_defaults(provider: str, base_url: str = "") -> Dict[str, str]:
     provider_base_urls = {
         "openai": "",
@@ -275,6 +341,26 @@ def _friendly_exception_message(exc: Exception, provider: str = "", base_url: st
         return "API Key 可被识别，但账户余额或项目额度不足。请检查该供应商后台的余额、额度、项目预算或计费设置。"
     return raw
 
+
+def classify_provider_error(exc: Exception, provider: str = "", request_id: str = "", base_url: str = "") -> str:
+    raw = str(exc or "")
+    low = raw.lower()
+    error_name = type(exc).__name__.lower()
+    request_note = f" 请求 ID：{request_id}。" if request_id else ""
+    if "timeout" in error_name or "timed out" in low or "timeout" in low:
+        return (
+            f"{provider or 'API'} 请求超时。供应商可能已经接收并处理了请求，因此不要立即重复发送，以免再次计费。"
+            f"{request_note}可先到供应商后台按时间或请求记录核对，再决定是否重试。"
+        )
+    if "invalid_api_key" in low or "incorrect api key" in low or "invalid x-api-key" in low or "401" in low:
+        return f"API Key 鉴权失败，请核对供应商、Key 和项目权限。{request_note}"
+    if "insufficient balance" in low or "402" in low or "quota" in low or "billing" in low:
+        return f"API 账户余额、额度或项目预算不足，请到供应商后台检查计费状态。{request_note}"
+    if "connection" in error_name or "connection" in low or "connect" in low:
+        return f"无法连接到 {provider or 'API'} 服务，请检查网络和 Base URL。{request_note}"
+    friendly = _friendly_exception_message(exc, provider, base_url)
+    return f"{friendly}{request_note}".strip()
+
 def test_llm_connection(api_key: str, provider: str = "openai", model: str = "", base_url: str = "") -> Dict[str, Any]:
     """Actively contact the selected backend with a tiny request.
 
@@ -292,33 +378,32 @@ def test_llm_connection(api_key: str, provider: str = "openai", model: str = "",
         return {"ok": False, "error": "未填写 API Key。"}
     if not model:
         return {"ok": False, "error": "未选择或填写模型名称。"}
+    request_id = uuid.uuid4().hex
+    policy = build_request_policy(provider, "connection_test")
     try:
         if provider == "anthropic":
             anth_base = (base_url or "https://api.anthropic.com").rstrip("/")
-            payload = {"model": model, "max_tokens": 32, "messages": [{"role": "user", "content": "请只回复：连接成功"}]}
+            payload = {"model": model, "max_tokens": policy.max_output_tokens, "messages": [{"role": "user", "content": "请只回复：连接成功"}]}
             req = urllib.request.Request(
                 anth_base + "/v1/messages",
                 data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                 headers={"content-type": "application/json", "x-api-key": api_key, "anthropic-version": "2023-06-01"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=float(os.getenv("LLM_TEST_TIMEOUT", "12"))) as resp:
+            with urllib.request.urlopen(req, timeout=policy.read_timeout) as resp:
                 obj = json.loads(resp.read().decode("utf-8"))
-            return {"ok": True, "provider": provider, "model": model, "base_url": anth_base, "raw_type": obj.get("type", "message")}
+            return {"ok": True, "provider": provider, "model": model, "base_url": anth_base, "request_id": request_id, "raw_type": obj.get("type", "message")}
         from openai import OpenAI
-        kwargs = {"api_key": api_key, "timeout": float(os.getenv("LLM_TEST_TIMEOUT", "12"))}
-        if base_url:
-            kwargs["base_url"] = base_url
-        client = OpenAI(**kwargs)
+        client = OpenAI(**_openai_client_kwargs(api_key, base_url, policy))
         if provider == "openai":
-            resp = client.responses.create(model=model, input="请只回复：连接成功", max_output_tokens=32)
+            resp = client.responses.create(model=model, input="请只回复：连接成功", max_output_tokens=policy.max_output_tokens)
             text = getattr(resp, "output_text", "") or str(resp)[:200]
         else:
-            resp = client.chat.completions.create(model=model, messages=[{"role": "user", "content": "请只回复：连接成功"}], max_tokens=32, temperature=0)
+            resp = client.chat.completions.create(model=model, messages=[{"role": "user", "content": "请只回复：连接成功"}], max_tokens=policy.max_output_tokens, temperature=0)
             text = _plain_text_from_chat_completion(resp)
         if _looks_like_html(text):
             return {"ok": False, "provider": provider, "model": model, "base_url": base_url, "error": _friendly_html_backend_message(provider, base_url)}
-        return {"ok": True, "provider": provider, "model": model, "base_url": base_url, "sample": text[:120]}
+        return {"ok": True, "provider": provider, "model": model, "base_url": base_url, "request_id": request_id, "sample": text[:120]}
     except urllib.error.HTTPError as exc:
         body = ""
         try:
@@ -328,9 +413,9 @@ def test_llm_connection(api_key: str, provider: str = "openai", model: str = "",
         err_text = f"HTTP {exc.code}: {body or exc.reason}"
         if _looks_like_html(body):
             err_text = _friendly_html_backend_message(provider, base_url)
-        return {"ok": False, "provider": provider, "model": model, "base_url": base_url, "error": err_text}
+        return {"ok": False, "provider": provider, "model": model, "base_url": base_url, "request_id": request_id, "error": err_text}
     except Exception as exc:
-        return {"ok": False, "provider": provider, "model": model, "base_url": base_url, "error": _friendly_exception_message(exc, provider, base_url)}
+        return {"ok": False, "provider": provider, "model": model, "base_url": base_url, "request_id": request_id, "error": classify_provider_error(exc, provider, request_id, base_url)}
 
 def ask_llm(
     question: str,
@@ -353,12 +438,11 @@ def ask_llm(
     if not api_key:
         return {"provider": "local_fallback", "answer": _clean_answer_text(local_fallback_reply(question, report, mode_override))}
 
+    request_id = uuid.uuid4().hex
+    policy = build_request_policy(provider, mode_override or "general")
     try:
         from openai import OpenAI
-        client_kwargs = {"api_key": api_key, "timeout": float(os.getenv("LLM_TIMEOUT", "28"))}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        client = OpenAI(**client_kwargs)
+        client = OpenAI(**_openai_client_kwargs(api_key, base_url, policy))
         model = (model_override or os.getenv("OPENAI_MODEL", "") or defaults.get("model", "gpt-4.1-mini")).strip()
         if not model:
             raise ValueError("请在 API 配置中选择或填写模型名称。")
@@ -382,7 +466,7 @@ def ask_llm(
             anth_base = (base_url or "https://api.anthropic.com").rstrip("/")
             payload = {
                 "model": model,
-                "max_tokens": 1200,
+                "max_tokens": policy.max_output_tokens,
                 "temperature": 0.15,
                 "system": SYSTEM_INSTRUCTIONS,
                 "messages": [{"role": "user", "content": _anthropic_content_blocks(context_text, attachments or [])}],
@@ -397,7 +481,7 @@ def ask_llm(
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=float(os.getenv("LLM_TIMEOUT", "28"))) as resp:
+            with urllib.request.urlopen(req, timeout=policy.read_timeout) as resp:
                 obj = json.loads(resp.read().decode("utf-8"))
             parts = []
             for block in obj.get("content", []):
@@ -409,13 +493,14 @@ def ask_llm(
                 {"type": "input_text", "text": context_text}
             ]
             content.extend(_image_payloads(attachments or []))
-            response = client.responses.create(
+            with client.responses.stream(
                 model=model,
                 instructions=SYSTEM_INSTRUCTIONS,
                 input=[{"role": "user", "content": content}],
                 temperature=0.15,
-                max_output_tokens=1200,
-            )
+                max_output_tokens=policy.max_output_tokens,
+            ) as stream:
+                response = stream.get_final_response()
             answer = getattr(response, "output_text", None) or str(response)
         else:
             # Most third-party "OpenAI-compatible" services support Chat Completions
@@ -435,15 +520,18 @@ def ask_llm(
                     {"role": "user", "content": user_content},
                 ],
                 temperature=0.15,
-                max_tokens=1200,
+                max_tokens=policy.max_output_tokens,
+                stream=policy.stream,
             )
-            answer = _plain_text_from_chat_completion(response)
+            answer = _plain_text_from_chat_stream(response) if policy.stream else _plain_text_from_chat_completion(response)
         if _looks_like_html(answer):
-            return {"provider": "api_config_error", "base_url": base_url, "model": model, "error": "backend_returned_html", "answer": _clean_answer_text(_friendly_html_backend_message(provider, base_url))}
-        return {"provider": provider, "base_url": base_url, "model": model, "answer": _clean_answer_text(answer)}
+            return {"provider": "api_config_error", "base_url": base_url, "model": model, "request_id": request_id, "error": "backend_returned_html", "answer": _clean_answer_text(_friendly_html_backend_message(provider, base_url))}
+        return {"provider": provider, "base_url": base_url, "model": model, "request_id": request_id, "answer": _clean_answer_text(answer)}
     except Exception as exc:
+        error_message = classify_provider_error(exc, provider, request_id, base_url)
         return {
             "provider": "local_fallback_after_api_error",
-            "error": _friendly_exception_message(exc, provider, base_url),
-            "answer": _clean_answer_text(_friendly_exception_message(exc, provider, base_url) + "\n\n" + local_fallback_reply(question, report, mode_override)),
+            "request_id": request_id,
+            "error": error_message,
+            "answer": _clean_answer_text(error_message + "\n\n" + local_fallback_reply(question, report, mode_override)),
         }

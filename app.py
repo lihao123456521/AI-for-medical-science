@@ -21,6 +21,7 @@ from core.data_loader import KnowledgeBase, CaseRecord, case_sort_key
 from core.risk_engine import generate_traceable_report
 from core.llm_client import ask_llm, test_llm_connection
 from core.case_parser import parse_case_file
+from core.chat_routing import classify_chat_request, has_detailed_case
 
 load_dotenv()
 
@@ -2052,22 +2053,6 @@ def api_delete_case(case_id):
 
 
 
-def _is_analysis_request(question: str, mode: str = "") -> bool:
-    """Only the first confirmed-patient analysis and explicit requests should pull case/article cards.
-    Normal follow-up questions are answered by the AI using current patient context, without appending cases/articles.
-    """
-    q = str(question or "")
-    if mode == "initial_patient_analysis":
-        return True
-    keywords = [
-        "总体分析", "分析当前", "完整分析", "治疗讨论", "治疗建议", "手术", "用药",
-        "相似病例", "参考文献", "文献", "指南", "证据", "转归", "复发", "预后", "方案", "下一步"
-    ]
-    return any(k in q for k in keywords)
-
-
-
-
 @app.get("/api/settings/mascot")
 def api_get_mascot():
     return jsonify({
@@ -2266,10 +2251,10 @@ def api_chat():
     model = (payload.get("model") or saved_api.get("model") or "").strip()
     provider = (payload.get("provider") or saved_api.get("provider") or "openai").strip()
     base_url = (payload.get("base_url") or saved_api.get("base_url") or "").strip()
-    if not patient or not any(str(v).strip() for v in patient.values() if v is not None):
-        patient = {"free_text": question}
+    confirmed_case = bool(payload.get("has_confirmed_case")) or has_detailed_case(patient)
+    route = classify_chat_request(question, confirmed_case, mode)
     image_attachments = [a for a in (attachments or []) if isinstance(a, dict) and a.get("type") == "image"]
-    if image_attachments:
+    if image_attachments and confirmed_case:
         patient = {**patient, "medical_images": image_attachments}
 
     # 对话内投喂：输入“投喂进入数据库/加入数据库/添加病例”时，将当前会话整理为新增病例。
@@ -2281,8 +2266,7 @@ def api_chat():
         patient = {**patient, "free_text": (patient.get("free_text") or "") + "\n" + merged_text}
         added_case = _add_case_from_fields(patient, source_text=merged_text)
 
-    analysis_request = _is_analysis_request(question, mode)
-    if analysis_request:
+    if route.retrieve_evidence:
         report = generate_traceable_report(kb, patient, top_n=4)
         article_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("diagnosis") or ""), str(patient.get("pathology") or ""), str(patient.get("surgery") or "")])
         report["related_articles"] = _search_articles(article_query, limit=4)
@@ -2296,13 +2280,16 @@ def api_chat():
             "candidate_matches": [],
             "treatment_outcomes": {},
             "risk": {"missing_items": []},
-            "answer_mode": "normal_followup_no_forced_retrieval",
-            "knowledge_digest": _knowledge_digest(),
+            "answer_mode": route.mode,
+            "knowledge_digest": _knowledge_digest() if route.use_case_context else {},
         }
-    llm_result = ask_llm(question=question, report=report, patient=patient, history=history, attachments=attachments, api_key_override=api_key, model_override=model, mode_override=(mode if analysis_request else "normal_followup"), provider_override=provider, base_url_override=base_url)
+    llm_patient = patient if route.use_case_context else {}
+    llm_history = history if route.use_case_context else []
+    llm_attachments = attachments if route.use_case_context else []
+    llm_result = ask_llm(question=question, report=report, patient=llm_patient, history=llm_history, attachments=llm_attachments, api_key_override=api_key, model_override=model, mode_override=route.mode, provider_override=provider, base_url_override=base_url)
     if added_case:
         llm_result["answer"] = f"已将当前对话整理并加入知识库：{added_case.case_id}。\n\n" + llm_result.get("answer", "")
-    return jsonify({"ok": True, "llm": llm_result, "report": report, "added_case": _case_to_public_dict(added_case) if added_case else None})
+    return jsonify({"ok": True, "llm": llm_result, "report": report, "route": route.mode, "added_case": _case_to_public_dict(added_case) if added_case else None})
 
 
 @app.post("/api/upload")

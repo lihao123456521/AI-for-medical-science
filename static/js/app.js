@@ -74,7 +74,7 @@ function renderAssistantText(text) {
 
 function currentChat() { return state.chats.find(c => c.id === state.activeId) || state.chats[0] || createChat(true); }
 function createChat(activate = true) {
-  const chat = { id: uid(), title: '新的病例对话', createdAt: Date.now(), updatedAt: Date.now(), patient: {}, attachments: [], messages: [] };
+  const chat = { id: uid(), title: '新的病例对话', createdAt: Date.now(), updatedAt: Date.now(), patient: {}, caseConfirmed: false, attachments: [], messages: [] };
   state.chats.unshift(chat);
   if (activate) state.activeId = chat.id;
   saveChats(); renderHistory(); renderChat();
@@ -89,7 +89,7 @@ function loadChats() {
     const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('uscc_chat_history_v33') || localStorage.getItem('uscc_chat_history_v32') || localStorage.getItem('uscc_chat_history_v31') || localStorage.getItem('uscc_chat_history_v30') || localStorage.getItem('uscc_chat_history_v29') || localStorage.getItem('uscc_chat_history_v19') || localStorage.getItem('uscc_chat_history_v18') || localStorage.getItem('uscc_chat_history_v17') || localStorage.getItem('uscc_chat_history_v16') || localStorage.getItem('uscc_chat_history_v15') || localStorage.getItem('uscc_chat_history_v14') || localStorage.getItem('uscc_chat_history_v13') || localStorage.getItem('uscc_chat_history_v12') || localStorage.getItem('uscc_chat_history_v11') || localStorage.getItem('uscc_chat_history_v10') || localStorage.getItem('uscc_chat_history_v9') || localStorage.getItem('uscc_chat_history_v8') || localStorage.getItem('uscc_chat_history_v7') || localStorage.getItem('uscc_chat_history_v6') || localStorage.getItem('uscc_chat_history_v5') || localStorage.getItem('uscc_chat_history_v4') || localStorage.getItem('uscc_chat_history_v3') || localStorage.getItem('uscc_chat_history_v2');
     if (raw) {
       const parsed = JSON.parse(raw);
-      state.chats = Array.isArray(parsed.chats) ? parsed.chats.map(c => ({ attachments: [], patient: {}, ...c })) : [];
+      state.chats = Array.isArray(parsed.chats) ? parsed.chats.map(c => ({ attachments: [], patient: {}, caseConfirmed: false, ...c })) : [];
       state.activeId = parsed.activeId || state.chats[0]?.id || null;
     }
   } catch (_) {}
@@ -262,6 +262,7 @@ function selectCandidateInChat(c) {
     if (c[k]) merged[k] = c[k];
   }
   chat.patient = merged;
+  chat.caseConfirmed = true;
   refreshChatTitle(chat);
   saveChats();
   renderHistory();
@@ -277,6 +278,7 @@ async function analyzeSelectedCandidate(c) {
       question: '请基于医生已选择的患者进行总体分析，检索相似病例和可参考文献，并给出下一步讨论方向。',
       mode: 'initial_patient_analysis',
       patient: chat.patient || {},
+      has_confirmed_case: true,
       history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
@@ -334,11 +336,23 @@ function replaceMessage(id, patch) {
 }
 function scrollToBottom() { requestAnimationFrame(() => { els.chatWindow.scrollTop = els.chatWindow.scrollHeight; }); }
 function resizeInput() { els.input.style.height = 'auto'; els.input.style.height = Math.min(190, els.input.scrollHeight) + 'px'; }
-function mergePatientFromText(text) {
+function looksLikeDetailedCaseText(text) {
+  const raw = String(text || '').trim();
+  const markers = ['年龄','性别','诊断','病史','症状','影像','CT','MRI','病理','TNM','淋巴结','手术史'];
+  const hits = markers.filter(marker => raw.toLowerCase().includes(marker.toLowerCase())).length;
+  return raw.length >= 80 && hits >= 3;
+}
+function updatePatientFromExplicitText(text) {
   const chat = currentChat();
+  const raw = String(text || '').trim();
+  const explicit = raw.match(/^(?:补充病例|更新病例|病例信息)[：:]\s*([\s\S]+)/);
+  const caseText = explicit ? explicit[1].trim() : (looksLikeDetailedCaseText(raw) ? raw : '');
+  if (!caseText) return false;
   const old = chat.patient?.free_text || '';
-  chat.patient = { ...(chat.patient || {}), free_text: [old, text].filter(Boolean).join('\n') };
+  chat.patient = { ...(chat.patient || {}), free_text: [old, caseText].filter(Boolean).join('\n') };
+  chat.caseConfirmed = true;
   refreshChatTitle(chat);
+  return true;
 }
 function apiPayloadExtras() {
   const provider = localStorage.getItem(API_PROVIDER_STORAGE) || 'openai';
@@ -353,7 +367,7 @@ function apiPayloadExtras() {
 }
 async function sendMessage() {
   const text = els.input.value.trim(); if (!text) return;
-  els.input.value = ''; resizeInput(); mergePatientFromText(text);
+  els.input.value = ''; resizeInput(); updatePatientFromExplicitText(text);
   const chat = currentChat();
   addMessage('user', text);
   const typing = addMessage('assistant', '正在理解问题并调用后台 AI 生成回答……');
@@ -361,7 +375,8 @@ async function sendMessage() {
   try {
     const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
       question: text,
-      patient: chat.patient || { free_text: text },
+      patient: chat.patient || {},
+      has_confirmed_case: Boolean(chat.caseConfirmed),
       history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
@@ -391,7 +406,12 @@ async function uploadFile(file) {
     if (!res.ok || !data.ok) throw new Error(data.error || data.note || '上传失败');
     const attachment = { filename: data.filename, stored_as: data.stored_as, url: data.url, type: data.type, batch_id: data.batch_id, candidate_count: data.candidate_count };
     chat.attachments = [...(chat.attachments || []), attachment];
-    if (data.fields && Object.keys(data.fields).length) { chat.patient = { ...(chat.patient || {}), ...data.fields }; refreshChatTitle(chat); }
+    if (data.fields && Object.keys(data.fields).length) {
+      chat.patient = { ...(chat.patient || {}), ...data.fields };
+      const clinicalKeys = ['age','sex','diagnosis','history','symptoms','tumor','imaging','pathology','tnm','lymph_node'];
+      chat.caseConfirmed = clinicalKeys.filter(key => String(data.fields[key] || '').trim()).length >= 3;
+      refreshChatTitle(chat);
+    }
     saveChats();
     const fieldNames = Object.keys(data.fields || {}).join('、');
     let text = fieldNames ? `已读取病例文件：${data.filename}

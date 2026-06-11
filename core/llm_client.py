@@ -86,9 +86,7 @@ def _article_discussion_line(article: Dict[str, Any]) -> str:
 
 
 def _is_initial_or_analysis_question(question: str, mode: str = "") -> bool:
-    if mode == "initial_patient_analysis":
-        return True
-    return any(w in question for w in ["分析当前", "总体分析", "治疗建议", "用药", "手术", "转归", "相似病例", "参考文献", "方案", "下一步", "比较病例"])
+    return mode in {"initial_patient_analysis", "explicit_retrieval"}
 
 def local_fallback_reply(question: str, report: Dict[str, Any], mode: str = "") -> str:
     if not _is_initial_or_analysis_question(question, mode):

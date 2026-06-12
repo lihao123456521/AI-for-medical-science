@@ -2219,6 +2219,10 @@ def api_llm_config_clear():
 def api_llm_config_save():
     payload = request.get_json(force=True, silent=True) or {}
     draft = api_config_store.resolve_request_config(payload)
+    try:
+        cfg = api_config_store.save_local(draft, test_ok=False)
+    except ValueError as exc:
+        return jsonify({"ok": False, "saved": False, "error": str(exc)}), 400
     test = test_llm_connection(
         api_key=draft.get("api_key", ""),
         provider=draft.get("provider", "openai"),
@@ -2228,7 +2232,7 @@ def api_llm_config_save():
     if test.get("ok"):
         cfg = api_config_store.save_verified(draft)
         return jsonify({"ok": True, "saved": True, "test": test, "config": api_config_store._masked(cfg), "message": "连接成功，已安全保存到本机并加入已记住配置。"})
-    return jsonify({"ok": True, "saved": False, "test": test, "message": "连接失败，未保存该 API 配置。"})
+    return jsonify({"ok": True, "saved": True, "test": test, "config": api_config_store._masked(cfg), "message": "API Key 已保存到本机；本次连接测试未通过，后续对话仍会使用该配置。"})
 
 
 @app.post("/api/llm/test")

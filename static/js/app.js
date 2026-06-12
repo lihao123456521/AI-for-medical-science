@@ -353,7 +353,7 @@ function updateStreamingBubble(id, text) {
 
 async function streamChat(url, payload, typingId) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 115000);
+  const timer = setTimeout(() => controller.abort(), 210000);
   let answerText = '';
   try {
     const res = await fetch(url, {
@@ -761,8 +761,9 @@ async function saveApiConfig() {
     const res = await fetchWithTimeout('/api/llm/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)}, 35000);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '后端保存失败');
-    if (data.test?.ok) els.apiKeyStatus.textContent = `后端连接成功：${data.test.provider} / ${data.test.model}，已保存到历史配置。`;
-    else els.apiKeyStatus.textContent = `连接失败，未保存该配置：${data.test?.error || data.message || '未知错误'}`;
+    if (data.test?.ok) els.apiKeyStatus.textContent = `后端连接成功：${data.test.provider} / ${data.test.model}，已保存到本机历史配置。`;
+    else if (data.saved) els.apiKeyStatus.textContent = `API Key 已保存到本机，但连接测试未通过：${data.test?.error || data.message || '未知错误'}。对话仍会调用该 API，不会自动改用本地模式。`;
+    else els.apiKeyStatus.textContent = `保存失败：${data.test?.error || data.message || '未知错误'}`;
     await fetchRememberedApiConfig();
   } catch (err) {
     els.apiKeyStatus.textContent = `保存/连接失败：${err.message}`;

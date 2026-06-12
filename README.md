@@ -107,7 +107,9 @@ The app can still run with local rules and knowledge-base retrieval when no API 
 
 API calls use bounded output lengths, provider-aware timeouts, streaming where supported, and no automatic SDK retries. A timeout message includes a request ID and warns that the provider may already have accepted the request, so users can check provider records before sending it again.
 
-Successfully tested API configurations can be switched from the remembered-configuration list without typing the key again. Full API keys remain only in the local runtime directory and are never included in the repository, public seed database, or release packages.
+API configurations are saved to the local runtime directory before the connection test runs, so a slow or temporarily unavailable provider no longer discards the key. Remembered configurations can be switched without typing the key again. Full API keys remain only in the local runtime directory and are never included in the repository, public seed database, or release packages.
+
+Chat requests use streaming, compact database evidence, bounded output, zero automatic retries, and a longer inactivity window for slower providers such as DeepSeek. This reduces time to first visible text while avoiding duplicate paid requests caused by automatic retries.
 
 ## Repository Structure
 

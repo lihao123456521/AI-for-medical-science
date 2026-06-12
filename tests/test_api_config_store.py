@@ -30,6 +30,22 @@ class ApiConfigStoreTests(unittest.TestCase):
         self.assertEqual(masked["api_key_masked"], "loca...3456")
         self.assertEqual(resolved["api_key"], "local-secret-123456")
 
+    def test_unverified_config_is_still_saved_locally_and_reusable(self):
+        saved = self.store.save_local({
+            "api_key": "slow-provider-secret-123456",
+            "provider": "deepseek",
+            "model": "deepseek-chat",
+            "base_url": "https://api.deepseek.com",
+        }, test_ok=False)
+
+        restarted = ApiConfigStore(Path(self.temp.name))
+        masked = restarted.current_masked()
+        resolved = restarted.resolve_request_config({"config_id": saved["config_id"]})
+
+        self.assertEqual(masked["test_ok"], False)
+        self.assertEqual(resolved["api_key"], "slow-provider-secret-123456")
+        self.assertEqual(len(restarted.history_masked()), 1)
+
     def test_history_config_can_be_activated_without_resubmitting_key(self):
         first = self.store.save_verified({"api_key": "first-local-secret-111111", "provider": "openai", "model": "gpt-4.1-mini"})
         self.store.save_verified({"api_key": "second-local-secret-222222", "provider": "deepseek", "model": "deepseek-chat"})

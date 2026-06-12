@@ -49,13 +49,47 @@ def build_request_policy(provider: str, mode: str) -> RequestPolicy:
     slower_compatible = {"deepseek", "openrouter", "fourrouter", "custom", "siliconflow", "volcengine"}
     return RequestPolicy(
         connect_timeout=10.0,
-        read_timeout=60.0 if provider_name in slower_compatible else 45.0,
+        read_timeout=180.0 if provider_name in slower_compatible else 120.0,
         write_timeout=30.0,
         pool_timeout=10.0,
         max_retries=0,
-        max_output_tokens=550 if mode_name == "initial_patient_analysis" else 350,
+        max_output_tokens=400 if mode_name == "initial_patient_analysis" else 240,
         stream=provider_name != "anthropic",
     )
+
+
+def _clip(value: Any, limit: int) -> Any:
+    if isinstance(value, str):
+        return value if len(value) <= limit else value[:limit] + "..."
+    if isinstance(value, list):
+        return [_clip(item, limit) for item in value]
+    if isinstance(value, dict):
+        return {key: _clip(item, limit) for key, item in value.items()}
+    return value
+
+
+def build_llm_context(
+    *,
+    question: str,
+    mode: str,
+    report: Dict[str, Any],
+    patient: Dict[str, Any],
+    history: List[Dict[str, str]] | None,
+    attachments: List[Dict[str, Any]] | None,
+) -> Dict[str, Any]:
+    return {
+        "user_question": _clip(question, 1200),
+        "conversation_mode": mode or "normal_followup",
+        "current_conversation_history": _clip((history or [])[-6:], 900),
+        "patient_input_current_chat_only": _clip(patient, 2400),
+        "similar_cases_selected": _clip(report.get("similar_cases", [])[:3], 900),
+        "related_articles_selected": _clip(report.get("related_articles", [])[:3], 900),
+        "candidate_matches": [],
+        "treatment_outcomes_from_similar_cases": _clip(report.get("treatment_outcomes", {}), 900),
+        "missing_items": _clip((report.get("risk") or {}).get("missing_items", []), 400),
+        "knowledge_base_digest_for_fast_recall": _clip(report.get("knowledge_digest", {}), 1200),
+        "attachments": _clip(attachments or [], 600),
+    }
 
 
 
@@ -447,19 +481,14 @@ def ask_llm(
         model = (model_override or os.getenv("OPENAI_MODEL", "") or defaults.get("model", "gpt-4.1-mini")).strip()
         if not model:
             raise ValueError("请在 API 配置中选择或填写模型名称。")
-        context = {
-            "user_question": question,
-            "conversation_mode": mode_override or "normal_followup",
-            "current_conversation_history": (history or [])[-8:],
-            "patient_input_current_chat_only": patient,
-            "similar_cases_selected": report.get("similar_cases", [])[:4],
-            "related_articles_selected": report.get("related_articles", [])[:4],
-            "candidate_matches": [],
-            "treatment_outcomes_from_similar_cases": report.get("treatment_outcomes", {}),
-            "missing_items": (report.get("risk") or {}).get("missing_items", []),
-            "knowledge_base_digest_for_fast_recall": report.get("knowledge_digest", {}),
-            "attachments": attachments or [],
-        }
+        context = build_llm_context(
+            question=question,
+            mode=mode_override or "normal_followup",
+            report=report,
+            patient=patient,
+            history=history,
+            attachments=attachments,
+        )
         context_text = json.dumps(context, ensure_ascii=False)
         if provider == "anthropic":
             # Native Anthropic Messages API. This supports Claude/Claude Code
@@ -622,19 +651,14 @@ def stream_ask_llm(
         yield "请在 API 配置中选择或填写模型名称。"
         return
 
-    context = {
-        "user_question": question,
-        "conversation_mode": mode_override or "normal_followup",
-        "current_conversation_history": (history or [])[-8:],
-        "patient_input_current_chat_only": patient,
-        "similar_cases_selected": report.get("similar_cases", [])[:4],
-        "related_articles_selected": report.get("related_articles", [])[:4],
-        "candidate_matches": [],
-        "treatment_outcomes_from_similar_cases": report.get("treatment_outcomes", {}),
-        "missing_items": (report.get("risk") or {}).get("missing_items", []),
-        "knowledge_base_digest_for_fast_recall": report.get("knowledge_digest", {}),
-        "attachments": attachments or [],
-    }
+    context = build_llm_context(
+        question=question,
+        mode=mode_override or "normal_followup",
+        report=report,
+        patient=patient,
+        history=history,
+        attachments=attachments,
+    )
     context_text = json.dumps(context, ensure_ascii=False)
 
     try:

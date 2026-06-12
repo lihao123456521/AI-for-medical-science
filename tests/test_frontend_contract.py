@@ -30,6 +30,12 @@ class FrontendContractTests(unittest.TestCase):
     def test_startup_removes_legacy_browser_plaintext_key(self):
         self.assertIn("localStorage.removeItem(API_KEY_STORAGE)", self.source)
 
+    def test_save_message_does_not_claim_failed_test_discarded_local_key(self):
+        body = self._function_body("saveApiConfig")
+
+        self.assertIn("data.saved", body)
+        self.assertNotIn("未保存该配置", body)
+
 
 if __name__ == "__main__":
     unittest.main()

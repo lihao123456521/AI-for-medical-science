@@ -39,6 +39,7 @@ class ApiConfigStore:
             "updated_at": data.get("updated_at", ""),
             "config_id": data.get("config_id", ""),
             "api_key_masked": key[:4] + "..." + key[-4:] if len(key) > 8 else ("已保存" if key else ""),
+            "test_ok": data.get("test_ok") is True,
         }
 
     @staticmethod
@@ -76,7 +77,7 @@ class ApiConfigStore:
         rows: list[dict[str, Any]] = []
         seen: set[str] = set()
         for item in value if isinstance(value, list) else []:
-            if not isinstance(item, dict) or not item.get("api_key") or item.get("test_ok") is not True:
+            if not isinstance(item, dict) or not item.get("api_key"):
                 continue
             row = dict(item)
             row["config_id"] = str(row.get("config_id") or self._config_id(row))
@@ -86,19 +87,22 @@ class ApiConfigStore:
             rows.append(row)
         return rows[:12]
 
-    def save_verified(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def save_local(self, payload: dict[str, Any], *, test_ok: bool = False) -> dict[str, Any]:
         data = self._clean(payload)
         if not data["api_key"] or not data["model"]:
             raise ValueError("API Key 和模型不能为空。")
         data.update({
             "updated_at": datetime.now().isoformat(timespec="seconds"),
             "config_id": self._config_id(data),
-            "test_ok": True,
+            "test_ok": bool(test_ok),
         })
         self._write(self.current_path, data)
         history = [data] + [row for row in self._history() if row.get("config_id") != data["config_id"]]
         self._write(self.history_path, history[:12])
         return data
+
+    def save_verified(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self.save_local(payload, test_ok=True)
 
     def current_masked(self) -> dict[str, Any]:
         return self._masked(self._current())

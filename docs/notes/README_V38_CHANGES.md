@@ -25,6 +25,8 @@
 ## Public Seed Library
 
 - The repository and release packages include 93 de-identified cases and 230 articles.
+- API keys are persisted locally before connection testing, including when a slow provider test times out.
+- Model prompts now use compact, bounded database evidence and shorter output limits; slower providers receive a longer streaming inactivity window without automatic retries.
 - Fresh installations initialize their local library automatically from `data/seed`.
 - Existing local data is never overwritten by the seed library.
 - Patient names, identity numbers, exact clinical dates, local paths, API keys, and image files are not published.

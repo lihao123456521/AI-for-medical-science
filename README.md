@@ -111,6 +111,8 @@ API configurations are saved to the local runtime directory before the connectio
 
 Chat requests use streaming, compact database evidence, bounded output, zero automatic retries, and a longer inactivity window for slower providers such as DeepSeek. This reduces time to first visible text while avoiding duplicate paid requests caused by automatic retries.
 
+The Windows launcher verifies the running service build before opening it, so an older installation on port 5000 cannot silently receive requests from a newer desktop shortcut. Provider token-rate-limit errors are sanitized, keep the reset time when supplied, and never expose provider API-key identifiers or trigger an automatic paid retry.
+
 ## Repository Structure
 
 ```text

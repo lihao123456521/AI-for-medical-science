@@ -3,6 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+EXPLICIT_RETRIEVAL_TERMS = (
+    "相似病例", "检索病例", "查找病例", "比较病例", "病例对照",
+    "参考文献", "检索文献", "查找文献", "文献证据", "查指南", "证据依据",
+)
+MEDICAL_TERMS = (
+    "疾病", "诊断", "治疗", "手术", "药物", "检查", "影像", "病理", "肿瘤", "癌",
+    "尿道", "膀胱", "阴茎", "淋巴结", "复发", "转移", "随访", "症状", "医学", "患者",
+    "SCC", "TNM", "CT", "MRI",
+)
 
 CASE_REFERENCE_TERMS = (
     "这个患者",
@@ -51,6 +60,7 @@ class ChatRoute:
     use_case_context: bool
     retrieve_evidence: bool
     mode: str
+    use_article_context: bool = False
 
 
 def has_detailed_case(patient: dict[str, Any] | None) -> bool:
@@ -70,10 +80,17 @@ def classify_chat_request(
 ) -> ChatRoute:
     q = str(question or "").strip()
     if mode == "initial_patient_analysis" and has_confirmed_case:
-        return ChatRoute(True, True, "initial_patient_analysis")
+        return ChatRoute(True, True, "initial_patient_analysis", True)
+
+    explicit_retrieval = any(term.lower() in q.lower() for term in EXPLICIT_RETRIEVAL_TERMS)
+    if explicit_retrieval and has_confirmed_case:
+        return ChatRoute(True, True, "explicit_retrieval", True)
 
     case_reference = any(term in q for term in CASE_REFERENCE_TERMS)
     if case_reference and has_confirmed_case:
-        return ChatRoute(True, False, "case_followup")
+        return ChatRoute(True, False, "case_followup", True)
 
-    return ChatRoute(False, False, "general")
+    if any(term.lower() in q.lower() for term in MEDICAL_TERMS):
+        return ChatRoute(False, False, "general_medical", True)
+
+    return ChatRoute(False, False, "general", False)

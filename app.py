@@ -23,6 +23,7 @@ from core.llm_client import ask_llm, test_llm_connection, stream_ask_llm
 from core.case_parser import parse_case_file
 from core.chat_routing import classify_chat_request, has_detailed_case
 from core.api_config_store import ApiConfigStore
+from core.evidence_context import build_evidence_report
 
 load_dotenv()
 
@@ -54,6 +55,19 @@ PERSISTENCE_REPAIR_LOG_PATH = PERSISTENT_DATA_DIR / "persistence_repair_log.json
 ARTICLES_DELETED_MARKER = PERSISTENT_DATA_DIR / "articles_deleted_all.marker"
 ARTICLES_V34_CLEARED_MARKER = PERSISTENT_DATA_DIR / "articles_v34_cleared.marker"
 api_config_store = ApiConfigStore(PERSISTENT_DATA_DIR)
+
+
+def _build_chat_report(route, question: str, patient: Dict[str, Any], attachments: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return build_evidence_report(
+        route=route,
+        question=question,
+        patient=patient,
+        attachments=attachments,
+        generate_case_report=lambda fields, top_n: generate_traceable_report(kb, fields, top_n=top_n),
+        search_articles=_search_articles,
+        find_candidates=_find_candidate_matches,
+        knowledge_digest=_knowledge_digest,
+    )
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-secret")
@@ -2249,23 +2263,7 @@ def api_chat():
         patient = {**patient, "free_text": (patient.get("free_text") or "") + "\n" + merged_text}
         added_case = _add_case_from_fields(patient, source_text=merged_text)
 
-    if route.retrieve_evidence:
-        report = generate_traceable_report(kb, patient, top_n=4)
-        article_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("diagnosis") or ""), str(patient.get("pathology") or ""), str(patient.get("surgery") or "")])
-        report["related_articles"] = _search_articles(article_query, limit=4)
-        candidate_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("age") or ""), str(patient.get("sex") or ""), str(patient.get("diagnosis") or "")])
-        report["candidate_matches"] = _find_candidate_matches(attachments, candidate_query, limit=4)
-        report["knowledge_digest"] = _knowledge_digest()
-    else:
-        report = {
-            "similar_cases": [],
-            "related_articles": [],
-            "candidate_matches": [],
-            "treatment_outcomes": {},
-            "risk": {"missing_items": []},
-            "answer_mode": route.mode,
-            "knowledge_digest": _knowledge_digest() if route.use_case_context else {},
-        }
+    report = _build_chat_report(route, question, patient, attachments)
     llm_patient = patient if route.use_case_context else {}
     llm_history = history if route.use_case_context else []
     llm_attachments = attachments if route.use_case_context else []
@@ -2301,23 +2299,7 @@ def api_chat_stream():
         patient = {**patient, "free_text": (patient.get("free_text") or "") + "\n" + merged_text}
         added_case = _add_case_from_fields(patient, source_text=merged_text)
 
-    if route.retrieve_evidence:
-        report = generate_traceable_report(kb, patient, top_n=4)
-        article_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("diagnosis") or ""), str(patient.get("pathology") or ""), str(patient.get("surgery") or "")])
-        report["related_articles"] = _search_articles(article_query, limit=4)
-        candidate_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("age") or ""), str(patient.get("sex") or ""), str(patient.get("diagnosis") or "")])
-        report["candidate_matches"] = _find_candidate_matches(attachments, candidate_query, limit=4)
-        report["knowledge_digest"] = _knowledge_digest()
-    else:
-        report = {
-            "similar_cases": [],
-            "related_articles": [],
-            "candidate_matches": [],
-            "treatment_outcomes": {},
-            "risk": {"missing_items": []},
-            "answer_mode": route.mode,
-            "knowledge_digest": _knowledge_digest() if route.use_case_context else {},
-        }
+    report = _build_chat_report(route, question, patient, attachments)
 
     llm_patient = patient if route.use_case_context else {}
     llm_history = history if route.use_case_context else []

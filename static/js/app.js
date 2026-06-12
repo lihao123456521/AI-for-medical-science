@@ -220,9 +220,9 @@ function renderMessage(msg) {
   content.innerHTML = msg.role === 'assistant' ? renderAssistantText(msg.content || '') : escapeHtml(msg.content || '').replace(/\n/g, '<br>');
   bubble.appendChild(content);
   if (msg.attachments?.length) bubble.appendChild(renderAttachments(msg.attachments));
-  if (msg.report?.similar_cases?.length) bubble.appendChild(renderCaseLinks(msg.report.similar_cases));
+  if (msg.report?.display_evidence_cards !== false && msg.report?.similar_cases?.length) bubble.appendChild(renderCaseLinks(msg.report.similar_cases));
   if (msg.candidates?.length) bubble.appendChild(renderCandidateLinks(msg.candidates));
-  if (msg.report?.related_articles?.length) bubble.appendChild(renderArticleLinks(msg.report.related_articles));
+  if (msg.report?.display_evidence_cards !== false && msg.report?.related_articles?.length) bubble.appendChild(renderArticleLinks(msg.report.related_articles));
   row.appendChild(bubble); els.chatWindow.appendChild(row);
 }
 function renderAttachments(files) {

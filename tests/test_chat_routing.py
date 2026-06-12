@@ -33,6 +33,14 @@ class ChatRoutingTests(unittest.TestCase):
 
         self.assertFalse(route.retrieve_evidence)
         self.assertFalse(route.use_case_context)
+        self.assertEqual(route.mode, "general_medical")
+        self.assertTrue(route.use_article_context)
+
+    def test_unrelated_question_uses_no_medical_database_context(self):
+        route = classify_chat_request("Python如何读取PDF？", has_confirmed_case=False)
+
+        self.assertEqual(route.mode, "general")
+        self.assertFalse(route.use_article_context)
 
     def test_initial_analysis_requires_detailed_case(self):
         detailed = {"age": "56", "sex": "男", "imaging": "尿道肿块", "pathology": "鳞癌"}

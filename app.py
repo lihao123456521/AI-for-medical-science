@@ -22,6 +22,7 @@ from core.risk_engine import generate_traceable_report
 from core.llm_client import ask_llm, test_llm_connection, stream_ask_llm
 from core.case_parser import parse_case_file
 from core.chat_routing import classify_chat_request, has_detailed_case
+from core.api_config_store import ApiConfigStore
 
 load_dotenv()
 
@@ -52,6 +53,7 @@ KB_DIGEST_PATH = PERSISTENT_DATA_DIR / "knowledge_digest.json"
 PERSISTENCE_REPAIR_LOG_PATH = PERSISTENT_DATA_DIR / "persistence_repair_log.json"
 ARTICLES_DELETED_MARKER = PERSISTENT_DATA_DIR / "articles_deleted_all.marker"
 ARTICLES_V34_CLEARED_MARKER = PERSISTENT_DATA_DIR / "articles_v34_cleared.marker"
+api_config_store = ApiConfigStore(PERSISTENT_DATA_DIR)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-secret")
@@ -2162,50 +2164,33 @@ def _save_api_config(payload: Dict[str, Any], test_ok: bool = False) -> Dict[str
 
 @app.get("/api/llm/config")
 def api_llm_config_get():
-    _prune_current_api_config_if_unverified()
-    cfg = _load_saved_api_config()
-    if cfg and not cfg.get("config_id"):
-        cfg["config_id"] = _api_config_id(cfg)
-    if cfg and cfg.get("test_ok") is not True:
-        cfg = {}
-    masked = _masked_api_config(cfg) if cfg else {}
-    raw_history = _normalize_api_config_history(save=True)
-    if cfg and cfg.get("api_key") and cfg.get("test_ok") is True:
-        raw_history = [cfg] + [x for x in raw_history if x.get("config_id") != cfg.get("config_id")]
-    history = [_masked_api_config(x) for x in raw_history]
-    return jsonify({"ok": True, "config": masked, "history": history, "remembered": bool(cfg), "message": "已自动清理未连接成功的 API 配置。"})
+    masked = api_config_store.current_masked()
+    return jsonify({
+        "ok": True,
+        "config": masked,
+        "history": api_config_store.history_masked(),
+        "remembered": bool(masked),
+        "message": "API Key 仅保存在本机后端，浏览器不会读取完整 Key。",
+    })
 
 
 @app.post("/api/llm/config/use")
 def api_llm_config_use():
     payload = request.get_json(force=True, silent=True) or {}
     config_id = str(payload.get("config_id") or "").strip()
-    match = None
-    for item in _normalize_api_config_history(save=True):
-        if str(item.get("config_id") or "") == config_id:
-            match = item
-            break
-    if not match:
-        return jsonify({"ok": False, "error": "未找到该历史 API 配置。"}), 404
-    match = {k: str(match.get(k) or "").strip() for k in ["api_key", "provider", "model", "base_url", "updated_at", "config_id"]}
-    if not match.get("api_key"):
-        return jsonify({"ok": False, "error": "该历史配置没有保存 API Key，无法调用。"}), 400
-    match["updated_at"] = datetime.now().isoformat(timespec="seconds")
-    match["test_ok"] = True
-    _atomic_write_json(API_CONFIG_PATH, match)
-    return jsonify({"ok": True, "config": _masked_api_config(match), "message": "已切换到该 API 配置。"})
+    try:
+        masked = api_config_store.activate(config_id)
+    except KeyError as exc:
+        return jsonify({"ok": False, "error": str(exc).strip("'")}), 404
+    return jsonify({"ok": True, "config": masked, "message": "已切换并启用该本机 API 配置，无需重新输入 Key。"})
 
 
 
 @app.delete("/api/llm/config")
 def api_llm_config_clear():
     """Clear backend-saved API config so the app really returns to local mode."""
-    try:
-        if API_CONFIG_PATH.exists():
-            API_CONFIG_PATH.unlink()
-    except Exception as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 500
-    return jsonify({"ok": True, "message": "已清除后端 API 配置。"})
+    api_config_store.clear_all()
+    return jsonify({"ok": True, "message": "已清除本机 API 配置及历史记录。"})
 
 @app.post("/api/llm/config")
 def api_llm_config_save():
@@ -2217,10 +2202,9 @@ def api_llm_config_save():
         model=draft.get("model", ""),
         base_url=draft.get("base_url", ""),
     ) if draft.get("api_key") else {"ok": False, "error": "未填写 API Key。"}
-    cfg = _save_api_config(draft, test_ok=bool(test.get("ok")))
-    _normalize_api_config_history(save=True)
     if test.get("ok"):
-        return jsonify({"ok": True, "saved": True, "test": test, "config": _masked_api_config(cfg), "message": "连接成功，已保存并加入已记住配置。"})
+        cfg = api_config_store.save_verified(draft)
+        return jsonify({"ok": True, "saved": True, "test": test, "config": api_config_store._masked(cfg), "message": "连接成功，已安全保存到本机并加入已记住配置。"})
     return jsonify({"ok": True, "saved": False, "test": test, "message": "连接失败，未保存该 API 配置。"})
 
 
@@ -2244,13 +2228,11 @@ def api_chat():
     mode = (payload.get("mode") or "").strip()
     history = payload.get("history") or []
     attachments = payload.get("attachments") or []
-    saved_api = _load_saved_api_config()
-    if saved_api and saved_api.get("test_ok") is not True:
-        saved_api = {}
-    api_key = (payload.get("api_key") or saved_api.get("api_key") or "").strip()
-    model = (payload.get("model") or saved_api.get("model") or "").strip()
-    provider = (payload.get("provider") or saved_api.get("provider") or "openai").strip()
-    base_url = (payload.get("base_url") or saved_api.get("base_url") or "").strip()
+    resolved_api = api_config_store.resolve_request_config(payload)
+    api_key = resolved_api["api_key"]
+    model = resolved_api["model"]
+    provider = resolved_api["provider"]
+    base_url = resolved_api["base_url"]
     confirmed_case = bool(payload.get("has_confirmed_case")) or has_detailed_case(patient)
     route = classify_chat_request(question, confirmed_case, mode)
     image_attachments = [a for a in (attachments or []) if isinstance(a, dict) and a.get("type") == "image"]
@@ -2300,13 +2282,11 @@ def api_chat_stream():
     mode = (payload.get("mode") or "").strip()
     history = payload.get("history") or []
     attachments = payload.get("attachments") or []
-    saved_api = _load_saved_api_config()
-    if saved_api and saved_api.get("test_ok") is not True:
-        saved_api = {}
-    api_key = (payload.get("api_key") or saved_api.get("api_key") or "").strip()
-    model = (payload.get("model") or saved_api.get("model") or "").strip()
-    provider = (payload.get("provider") or saved_api.get("provider") or "openai").strip()
-    base_url = (payload.get("base_url") or saved_api.get("base_url") or "").strip()
+    resolved_api = api_config_store.resolve_request_config(payload)
+    api_key = resolved_api["api_key"]
+    model = resolved_api["model"]
+    provider = resolved_api["provider"]
+    base_url = resolved_api["base_url"]
     confirmed_case = bool(payload.get("has_confirmed_case")) or has_detailed_case(patient)
     route = classify_chat_request(question, confirmed_case, mode)
     image_attachments = [a for a in (attachments or []) if isinstance(a, dict) and a.get("type") == "image"]

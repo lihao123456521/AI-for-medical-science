@@ -1,0 +1,59 @@
+name: Build release packages
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build release packages
+        shell: powershell
+        run: ./scripts/build_release_packages.ps1 -Version "${{ github.ref_name }}"
+
+      - name: Verify bundled public database
+        shell: powershell
+        run: |
+          $manifest = Get-Content data/seed/manifest.json | ConvertFrom-Json
+          if ($manifest.case_count -ne 93 -or $manifest.article_count -ne 230) {
+            throw "Unexpected public database counts"
+          }
+          if ((Test-Path data/api_config.json) -or (Test-Path data/api_config_history.json)) {
+            throw "Private API configuration must not be published"
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead("dist/AI-for-medical-science-windows.zip")
+          $names = @($zip.Entries | ForEach-Object { $_.FullName.Replace("\", "/") })
+          $zip.Dispose()
+          foreach ($required in @(
+            "AI-for-medical-science/data/seed/manifest.json",
+            "AI-for-medical-science/data/seed/user_cases.json",
+            "AI-for-medical-science/data/seed/articles.json"
+          )) {
+            if ($required -notin $names) { throw "Missing release file: $required" }
+          }
+          if ($names -match "(^|/)(api_config(_history)?\.json|\.env)$") {
+            throw "Private configuration found in release package"
+          }
+
+      - name: Publish GitHub release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            dist/AI-for-medical-science-windows.zip `
+            dist/AI-for-medical-science-macos.tar.gz `
+            dist/AI-for-medical-science-linux.tar.gz `
+            dist/AI-rare-disease-assistant.exe `
+            --repo "${{ github.repository }}" `
+            --title "AI for Medical Science ${{ github.ref_name }}" `
+            --generate-notes

@@ -52,7 +52,7 @@ def build_request_policy(provider: str, mode: str) -> RequestPolicy:
         write_timeout=30.0,
         pool_timeout=10.0,
         max_retries=0,
-        max_output_tokens=900 if mode_name == "initial_patient_analysis" else 600,
+        max_output_tokens=550 if mode_name == "initial_patient_analysis" else 380,
         stream=provider_name != "anthropic",
     )
 
@@ -535,3 +535,131 @@ def ask_llm(
             "error": error_message,
             "answer": _clean_answer_text(error_message + "\n\n" + local_fallback_reply(question, report, mode_override)),
         }
+
+
+def _stream_anthropic_chunks(
+    api_key: str,
+    base_url: str,
+    model: str,
+    context_text: str,
+    attachments: List[Dict[str, Any]],
+    policy: RequestPolicy,
+):
+    """Generator yielding text chunks from Anthropic streaming API."""
+    anth_base = (base_url or "https://api.anthropic.com").rstrip("/")
+    messages = [{"role": "user", "content": _anthropic_content_blocks(context_text, attachments)}]
+    payload = {
+        "model": model,
+        "max_tokens": policy.max_output_tokens,
+        "temperature": 0.15,
+        "stream": True,
+        "system": SYSTEM_INSTRUCTIONS,
+        "messages": messages,
+    }
+    req = urllib.request.Request(
+        anth_base + "/v1/messages",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "content-type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=policy.read_timeout) as resp:
+        for raw_line in resp:
+            line = raw_line.decode("utf-8").rstrip("\r\n")
+            if not line.startswith("data: "):
+                continue
+            data_str = line[6:]
+            if data_str.strip() == "[DONE]":
+                break
+            try:
+                event = json.loads(data_str)
+                if event.get("type") == "content_block_delta":
+                    delta = event.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        chunk = delta.get("text", "")
+                        if chunk:
+                            yield chunk
+            except Exception:
+                continue
+
+
+def stream_ask_llm(
+    question: str,
+    report: Dict[str, Any],
+    patient: Dict[str, Any],
+    history: List[Dict[str, str]] | None = None,
+    attachments: List[Dict[str, Any]] | None = None,
+    api_key_override: str = "",
+    model_override: str = "",
+    mode_override: str = "",
+    provider_override: str = "",
+    base_url_override: str = "",
+):
+    """Generator version of ask_llm: yields text chunks for SSE streaming.
+
+    Raises RuntimeError with a user-friendly message on API errors.
+    When no API key is configured, yields the local fallback reply as a single chunk.
+    """
+    api_key = (api_key_override or os.getenv("OPENAI_API_KEY", "")).strip()
+    provider = (provider_override or os.getenv("LLM_PROVIDER", "openai")).strip() or "openai"
+    base_url = (base_url_override or os.getenv("LLM_BASE_URL", "")).strip()
+    defaults = _provider_defaults(provider, base_url)
+    if not base_url:
+        base_url = defaults.get("base_url", "")
+
+    if not api_key:
+        yield _clean_answer_text(local_fallback_reply(question, report, mode_override))
+        return
+
+    policy = build_request_policy(provider, mode_override or "general")
+    model = (model_override or os.getenv("OPENAI_MODEL", "") or defaults.get("model", "gpt-4.1-mini")).strip()
+    if not model:
+        yield "请在 API 配置中选择或填写模型名称。"
+        return
+
+    context = {
+        "user_question": question,
+        "conversation_mode": mode_override or "normal_followup",
+        "current_conversation_history": (history or [])[-8:],
+        "patient_input_current_chat_only": patient,
+        "similar_cases_selected": report.get("similar_cases", [])[:4],
+        "related_articles_selected": report.get("related_articles", [])[:4],
+        "candidate_matches": [],
+        "treatment_outcomes_from_similar_cases": report.get("treatment_outcomes", {}),
+        "missing_items": (report.get("risk") or {}).get("missing_items", []),
+        "knowledge_base_digest_for_fast_recall": report.get("knowledge_digest", {}),
+        "attachments": attachments or [],
+    }
+    context_text = json.dumps(context, ensure_ascii=False)
+
+    try:
+        if provider == "anthropic":
+            yield from _stream_anthropic_chunks(api_key, base_url, model, context_text, attachments or [], policy)
+        else:
+            from openai import OpenAI
+            client = OpenAI(**_openai_client_kwargs(api_key, base_url, policy))
+            img_parts = _image_payloads(attachments or [])
+            if img_parts:
+                user_content: Any = [{"type": "text", "text": context_text}]
+                for img in img_parts:
+                    user_content.append({"type": "image_url", "image_url": {"url": img.get("image_url", "")}})
+            else:
+                user_content = context_text
+            for chunk in client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                    {"role": "user", "content": user_content},
+                ],
+                temperature=0.15,
+                max_tokens=policy.max_output_tokens,
+                stream=True,
+            ):
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+    except Exception as exc:
+        raise RuntimeError(classify_provider_error(exc, provider, "", base_url)) from exc

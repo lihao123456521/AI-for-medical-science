@@ -14,12 +14,12 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, abort, send_from_directory
+from flask import Flask, jsonify, render_template, request, abort, send_from_directory, Response, stream_with_context
 from werkzeug.utils import secure_filename
 
 from core.data_loader import KnowledgeBase, CaseRecord, case_sort_key
 from core.risk_engine import generate_traceable_report
-from core.llm_client import ask_llm, test_llm_connection
+from core.llm_client import ask_llm, test_llm_connection, stream_ask_llm
 from core.case_parser import parse_case_file
 from core.chat_routing import classify_chat_request, has_detailed_case
 
@@ -2290,6 +2290,94 @@ def api_chat():
     if added_case:
         llm_result["answer"] = f"已将当前对话整理并加入知识库：{added_case.case_id}。\n\n" + llm_result.get("answer", "")
     return jsonify({"ok": True, "llm": llm_result, "report": report, "route": route.mode, "added_case": _case_to_public_dict(added_case) if added_case else None})
+
+
+@app.post("/api/chat/stream")
+def api_chat_stream():
+    payload = request.get_json(force=True, silent=True) or {}
+    patient = payload.get("patient") or {}
+    question = (payload.get("question") or "请结合当前病例进行讨论。").strip()
+    mode = (payload.get("mode") or "").strip()
+    history = payload.get("history") or []
+    attachments = payload.get("attachments") or []
+    saved_api = _load_saved_api_config()
+    if saved_api and saved_api.get("test_ok") is not True:
+        saved_api = {}
+    api_key = (payload.get("api_key") or saved_api.get("api_key") or "").strip()
+    model = (payload.get("model") or saved_api.get("model") or "").strip()
+    provider = (payload.get("provider") or saved_api.get("provider") or "openai").strip()
+    base_url = (payload.get("base_url") or saved_api.get("base_url") or "").strip()
+    confirmed_case = bool(payload.get("has_confirmed_case")) or has_detailed_case(patient)
+    route = classify_chat_request(question, confirmed_case, mode)
+    image_attachments = [a for a in (attachments or []) if isinstance(a, dict) and a.get("type") == "image"]
+    if image_attachments and confirmed_case:
+        patient = {**patient, "medical_images": image_attachments}
+
+    feed_words = ["投喂进入数据库", "加入数据库", "添加到数据库", "添加病例", "存入知识库", "加入知识库"]
+    added_case = None
+    if any(w in question for w in feed_words):
+        merged_text = "\n".join([str(m.get("content", "")) for m in history if m.get("role") == "user"] + [question])
+        patient = {**patient, "free_text": (patient.get("free_text") or "") + "\n" + merged_text}
+        added_case = _add_case_from_fields(patient, source_text=merged_text)
+
+    if route.retrieve_evidence:
+        report = generate_traceable_report(kb, patient, top_n=4)
+        article_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("diagnosis") or ""), str(patient.get("pathology") or ""), str(patient.get("surgery") or "")])
+        report["related_articles"] = _search_articles(article_query, limit=4)
+        candidate_query = " ".join([question, str(patient.get("free_text") or ""), str(patient.get("age") or ""), str(patient.get("sex") or ""), str(patient.get("diagnosis") or "")])
+        report["candidate_matches"] = _find_candidate_matches(attachments, candidate_query, limit=4)
+        report["knowledge_digest"] = _knowledge_digest()
+    else:
+        report = {
+            "similar_cases": [],
+            "related_articles": [],
+            "candidate_matches": [],
+            "treatment_outcomes": {},
+            "risk": {"missing_items": []},
+            "answer_mode": route.mode,
+            "knowledge_digest": _knowledge_digest() if route.use_case_context else {},
+        }
+
+    llm_patient = patient if route.use_case_context else {}
+    llm_history = history if route.use_case_context else []
+    llm_attachments = attachments if route.use_case_context else []
+    is_local_fallback = not api_key
+    added_case_dict = _case_to_public_dict(added_case) if added_case else None
+    added_case_prefix = f"已将当前对话整理并加入知识库：{added_case.case_id}。\n\n" if added_case else ""
+
+    def generate():
+        if added_case_prefix:
+            yield f"data: {json.dumps({'type': 'chunk', 'text': added_case_prefix}, ensure_ascii=False)}\n\n"
+        try:
+            for chunk in stream_ask_llm(
+                question=question,
+                report=report,
+                patient=llm_patient,
+                history=llm_history,
+                attachments=llm_attachments,
+                api_key_override=api_key,
+                model_override=model,
+                mode_override=route.mode,
+                provider_override=provider,
+                base_url_override=base_url,
+            ):
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk}, ensure_ascii=False)}\n\n"
+        except RuntimeError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(exc)}, ensure_ascii=False)}\n\n"
+        done_payload = {
+            "type": "done",
+            "report": report,
+            "route": route.mode,
+            "local_fallback": is_local_fallback,
+            "added_case": added_case_dict,
+        }
+        yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
+
+    resp = Response(stream_with_context(generate()), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    resp.headers["Connection"] = "keep-alive"
+    return resp
 
 
 @app.post("/api/upload")

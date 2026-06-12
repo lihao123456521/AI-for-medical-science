@@ -212,6 +212,7 @@ function renderChat() {
 function renderMessage(msg) {
   const row = document.createElement('div');
   row.className = `message-row ${msg.role === 'user' ? 'user' : 'assistant'}`;
+  row.dataset.msgId = msg.id;
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   const content = document.createElement('div');
@@ -289,7 +290,7 @@ async function analyzeSelectedCandidate(c) {
   const chat = currentChat();
   const typing = addMessage('assistant', '已选择该患者，正在检索病例、文献并生成初步分析……');
   try {
-    const res = await fetchWithTimeout('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    await streamChat('/api/chat/stream', {
       question: '请基于医生已选择的患者进行总体分析，检索相似病例和可参考文献，并给出下一步讨论方向。',
       mode: 'initial_patient_analysis',
       patient: chat.patient || {},
@@ -297,19 +298,7 @@ async function analyzeSelectedCandidate(c) {
       history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
-    })}, 105000);
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || '后端返回错误');
-    let answerText = normalizeBackendMessage(data.llm?.answer || '系统没有生成回答。');
-    if (data.llm?.provider && data.llm.provider.startsWith('local_fallback')) {
-      if (data.llm.error) answerText += `
-
-（后台 AI 调用失败，已使用本地知识库回答：${data.llm.error}）`;
-      else if (!(localStorage.getItem(API_KEY_STORAGE) || '').trim()) answerText += `
-
-（当前未配置 API Key，因此使用本地知识库兜底回答；配置后会调用所选 AI 模型。）`;
-    }
-    replaceMessage(typing.id, { content: answerText, report: data.report, candidates: [] });
+    }, typing.id);
   } catch (err) {
     replaceMessage(typing.id, { content: `分析失败：${err.message}` });
   }
@@ -350,6 +339,80 @@ function replaceMessage(id, patch) {
   if (idx >= 0) { chat.messages[idx] = { ...chat.messages[idx], ...patch }; saveChats(); renderChat(); }
 }
 function scrollToBottom() { requestAnimationFrame(() => { els.chatWindow.scrollTop = els.chatWindow.scrollHeight; }); }
+
+function updateStreamingBubble(id, text) {
+  const row = document.querySelector(`[data-msg-id="${id}"]`);
+  if (!row) return;
+  const contentDiv = row.querySelector('.message-bubble > div:first-child');
+  if (contentDiv) {
+    contentDiv.innerHTML = renderAssistantText(text);
+    scrollToBottom();
+  }
+}
+
+async function streamChat(url, payload, typingId) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 115000);
+  let answerText = '';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const d = await res.json(); msg = d.error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let done = false;
+    while (!done) {
+      const { done: streamDone, value } = await reader.read();
+      if (streamDone) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch (_) { continue; }
+        if (evt.type === 'chunk' && evt.text) {
+          answerText += evt.text;
+          updateStreamingBubble(typingId, answerText);
+        } else if (evt.type === 'done') {
+          const chat = currentChat();
+          const hasCandidateBatch = (chat.attachments || []).some(a => a.type === 'candidate_case_batch');
+          const q = String(payload.question || '');
+          const asksMatch = /候选|匹配|哪个病人|哪位患者|查找患者|识别患者|选择患者|住院号|姓名|年龄/.test(q);
+          const shouldShowCandidates = !chat.selectedCandidateId && hasCandidateBatch && asksMatch && evt.report?.candidate_matches?.length;
+          let finalText = normalizeBackendMessage(answerText || '系统没有生成回答。');
+          if (evt.local_fallback && !(localStorage.getItem(API_KEY_STORAGE) || '').trim()) {
+            finalText += '\n\n（当前未配置 API Key，因此使用本地知识库兜底回答；配置后会调用所选 AI 模型。）';
+          }
+          replaceMessage(typingId, {
+            content: finalText,
+            report: evt.report || { similar_cases: [], related_articles: [] },
+            candidates: shouldShowCandidates ? evt.report.candidate_matches : [],
+          });
+          done = true;
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || '后台生成出错');
+        }
+      }
+    }
+    if (!done && answerText) {
+      replaceMessage(typingId, { content: normalizeBackendMessage(answerText), report: { similar_cases: [], related_articles: [] } });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function resizeInput() { els.input.style.height = 'auto'; els.input.style.height = Math.min(190, els.input.scrollHeight) + 'px'; }
 function looksLikeDetailedCaseText(text) {
   const raw = String(text || '').trim();
@@ -385,28 +448,17 @@ async function sendMessage() {
   els.input.value = ''; resizeInput(); updatePatientFromExplicitText(text);
   const chat = currentChat();
   addMessage('user', text);
-  const typing = addMessage('assistant', '正在理解问题并调用后台 AI 生成回答……');
+  const typing = addMessage('assistant', '正在生成回答……');
   els.sendBtn.disabled = true;
   try {
-    const res = await fetchWithTimeout('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    await streamChat('/api/chat/stream', {
       question: text,
       patient: chat.patient || {},
       has_confirmed_case: Boolean(chat.caseConfirmed),
       history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
-    })}, 105000);
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || '后端返回错误');
-    const hasCandidateBatch = (chat.attachments || []).some(a => a.type === 'candidate_case_batch');
-    const asksMatch = /候选|匹配|哪个病人|哪位患者|查找患者|识别患者|选择患者|住院号|姓名|年龄/.test(text);
-    const shouldShowCandidates = !chat.selectedCandidateId && hasCandidateBatch && asksMatch && data.report?.candidate_matches?.length;
-    let answerText = normalizeBackendMessage(data.llm?.answer || '系统没有生成回答。');
-    if (data.llm?.provider && data.llm.provider.startsWith('local_fallback')) {
-      if (data.llm.error) answerText += `\n\n（后台 AI 调用失败，已使用本地知识库回答：${data.llm.error}）`;
-      else if (!(localStorage.getItem(API_KEY_STORAGE) || '').trim()) answerText += '\n\n（当前未配置 API Key，因此使用本地知识库兜底回答；配置后会调用所选 AI 模型。）';
-    }
-    replaceMessage(typing.id, { content: answerText, report: data.report, candidates: shouldShowCandidates ? data.report.candidate_matches : [] });
+    }, typing.id);
   } catch (err) {
     replaceMessage(typing.id, { content: `请求失败：${err.message}\n请确认 Flask 后端仍在运行。` });
   } finally { els.sendBtn.disabled = false; els.input.focus(); }

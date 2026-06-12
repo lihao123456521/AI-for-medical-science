@@ -4,20 +4,6 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EXPLICIT_RETRIEVAL_TERMS = (
-    "相似病例",
-    "检索病例",
-    "查找病例",
-    "比较病例",
-    "病例对照",
-    "参考文献",
-    "检索文献",
-    "查找文献",
-    "文献证据",
-    "查指南",
-    "检索指南",
-    "证据依据",
-)
 CASE_REFERENCE_TERMS = (
     "这个患者",
     "该患者",
@@ -85,10 +71,6 @@ def classify_chat_request(
     q = str(question or "").strip()
     if mode == "initial_patient_analysis" and has_confirmed_case:
         return ChatRoute(True, True, "initial_patient_analysis")
-
-    explicit_retrieval = any(term in q for term in EXPLICIT_RETRIEVAL_TERMS)
-    if explicit_retrieval and has_confirmed_case:
-        return ChatRoute(True, True, "explicit_retrieval")
 
     case_reference = any(term in q for term in CASE_REFERENCE_TERMS)
     if case_reference and has_confirmed_case:

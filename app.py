@@ -29,6 +29,7 @@ from core.seed_data import initialize_runtime_from_seed
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
+APP_BUILD_ID = "2026.06.13-v39"
 DATA_PATH = Path(os.getenv("DATA_PATH", "data/knowledge_base.xlsx"))
 if not DATA_PATH.is_absolute():
     DATA_PATH = BASE_DIR / DATA_PATH
@@ -2446,7 +2447,7 @@ def api_candidate_add():
 
 @app.get("/healthz")
 def healthz():
-    return jsonify({"status": "ok", "records": len(kb.records), "data_path": str(DATA_PATH)})
+    return jsonify({"status": "ok", "build_id": APP_BUILD_ID, "records": len(kb.records), "data_path": str(DATA_PATH)})
 
 
 if __name__ == "__main__":

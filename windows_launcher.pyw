@@ -19,6 +19,7 @@ APP_TITLE = "AI罕见病助手"
 BASE_DIR = Path(__file__).resolve().parent
 LOG_PATH = BASE_DIR / "launcher.log"
 DEFAULT_PORT = 5000
+EXPECTED_BUILD_ID = "2026.06.13-v39"
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 ICON_PATH = BASE_DIR / "static" / "assets" / "app_icon.ico"
 ICON_PNG_PATH = BASE_DIR / "static" / "assets" / "app_icon.png"
@@ -177,12 +178,21 @@ def app_url(port: int) -> str:
     return f"http://127.0.0.1:{port}"
 
 
-def is_health_ok(port: int) -> bool:
+def read_health(port: int) -> dict:
     try:
         with urllib.request.urlopen(health_url(port), timeout=1.5) as response:
-            return response.status == 200
-    except (OSError, urllib.error.URLError):
-        return False
+            if response.status != 200:
+                return {}
+            import json
+            value = json.loads(response.read().decode("utf-8"))
+            return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, urllib.error.URLError):
+        return {}
+
+
+def is_matching_health(port: int) -> bool:
+    health = read_health(port)
+    return health.get("status") == "ok" and health.get("build_id") == EXPECTED_BUILD_ID
 
 
 def is_port_open(port: int) -> bool:
@@ -195,7 +205,7 @@ def is_port_open(port: int) -> bool:
 
 def choose_port() -> int:
     for port in range(DEFAULT_PORT, DEFAULT_PORT + 20):
-        if is_health_ok(port):
+        if is_matching_health(port):
             return port
         if not is_port_open(port):
             return port
@@ -223,7 +233,7 @@ def start_server(py: Path, port: int) -> subprocess.Popen:
 def wait_for_server(process: subprocess.Popen | None, port: int, timeout_seconds: int = 90) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        if is_health_ok(port):
+        if is_matching_health(port):
             return
         if process is not None and process.poll() is not None:
             raise RuntimeError("服务启动后立即退出，请查看 launcher.log。")
@@ -273,7 +283,7 @@ def launch(status: StringVar, root: Tk) -> None:
         ensure_dependencies(py, status)
         port = choose_port()
         process = None
-        if not is_health_ok(port):
+        if not is_matching_health(port):
             status.set("正在启动本地服务...")
             process = start_server(py, port)
         status.set("正在打开应用窗口...")

@@ -48,6 +48,7 @@ const els = {
 let state = { chats: [], activeId: null };
 let rememberedApiConfig = null;
 let rememberedApiHistory = [];
+let chatRequestInFlight = false;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const escapeHtml = (text) => String(text ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;').replaceAll("'",'&#039;');
 function formatSimilarity(value, percentValue) {
@@ -453,7 +454,9 @@ function apiPayloadExtras() {
   };
 }
 async function sendMessage() {
+  if (chatRequestInFlight) return;
   const text = els.input.value.trim(); if (!text) return;
+  chatRequestInFlight = true;
   els.input.value = ''; resizeInput(); updatePatientFromExplicitText(text);
   const chat = currentChat();
   addMessage('user', text);
@@ -470,7 +473,7 @@ async function sendMessage() {
     }, typing.id);
   } catch (err) {
     replaceMessage(typing.id, { content: `请求失败：${err.message}\n请确认 Flask 后端仍在运行。` });
-  } finally { els.sendBtn.disabled = false; els.input.focus(); }
+  } finally { chatRequestInFlight = false; els.sendBtn.disabled = false; els.input.focus(); }
 }
 async function uploadFile(file) {
   const chat = currentChat();

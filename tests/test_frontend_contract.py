@@ -36,6 +36,20 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("data.saved", body)
         self.assertNotIn("未保存该配置", body)
 
+    def test_send_message_has_inflight_duplicate_guard(self):
+        body = self._function_body("sendMessage")
+
+        self.assertIn("chatRequestInFlight", self.source)
+        self.assertIn("if (chatRequestInFlight)", body)
+        self.assertIn("chatRequestInFlight = true", body)
+        self.assertIn("chatRequestInFlight = false", body)
+
+    def test_api_errors_are_not_hidden_by_local_fallback_text(self):
+        stream_body = self._function_body("streamChat")
+
+        self.assertNotIn("local_fallback_after_api_error", stream_body)
+        self.assertNotIn("已使用本地", stream_body)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,6 +50,30 @@ class LlmPolicyTests(unittest.TestCase):
         self.assertIn("ART-0", encoded)
         self.assertNotIn("CASE-4", encoded)
 
+    def test_context_final_guard_handles_many_large_fields(self):
+        large_record = {f"field_{i}": "影像与病理描述" * 500 for i in range(40)}
+        report = {
+            "similar_cases": [{"case_id": "CASE-GUARD", **large_record}] * 3,
+            "related_articles": [{"article_id": "ART-GUARD", **large_record}] * 3,
+            "treatment_outcomes": large_record,
+            "risk": {"missing_items": list(large_record.values())},
+            "knowledge_digest": large_record,
+        }
+
+        context = build_llm_context(
+            question="请分析",
+            mode="initial_patient_analysis",
+            report=report,
+            patient=large_record,
+            history=[{"role": "user", "content": value} for value in large_record.values()],
+            attachments=[],
+        )
+        encoded = __import__("json").dumps(context, ensure_ascii=False)
+
+        self.assertLessEqual(len(encoded), 24000)
+        self.assertIn("CASE-GUARD", encoded)
+        self.assertIn("ART-GUARD", encoded)
+
     def test_timeout_message_warns_request_may_have_been_accepted(self):
         message = classify_provider_error(TimeoutError("read timed out"), "deepseek", "req-1")
 
@@ -60,6 +84,22 @@ class LlmPolicyTests(unittest.TestCase):
     def test_auth_and_quota_errors_are_classified(self):
         self.assertIn("鉴权失败", classify_provider_error(Exception("invalid_api_key"), "openai", "r1"))
         self.assertIn("余额", classify_provider_error(Exception("402 insufficient balance"), "deepseek", "r2"))
+
+    def test_token_rate_limit_keeps_reset_time_but_removes_key_identifier(self):
+        raw = (
+            "Error code: 429 - {'error': {'message': 'Rate limit exceeded for api_key: "
+            "c2246fc70a88eb9cc97be1195ed36eadba83c219e7b2916957c34fb16917ebca. "
+            "Limit type: tokens. Current limit: 100000, Remaining: 0. "
+            "Limit resets at: 2026-06-12 23:40:26 UTC'}}"
+        )
+
+        message = classify_provider_error(Exception(raw), "custom", "req-429")
+
+        self.assertIn("token", message.lower())
+        self.assertIn("2026-06-12 23:40:26 UTC", message)
+        self.assertIn("req-429", message)
+        self.assertNotIn("c2246fc70a88", message)
+        self.assertNotIn("api_key", message.lower())
 
 
 if __name__ == "__main__":

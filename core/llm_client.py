@@ -68,6 +68,16 @@ def _clip(value: Any, limit: int) -> Any:
     return value
 
 
+def _select_fields(value: Any, keys: tuple[str, ...], limit: int) -> Any:
+    if not isinstance(value, dict):
+        return _clip(value, limit)
+    return {key: _clip(value[key], limit) for key in keys if key in value and value[key] not in (None, "", [], {})}
+
+
+def _serialized_size(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
 def build_llm_context(
     *,
     question: str,
@@ -77,7 +87,7 @@ def build_llm_context(
     history: List[Dict[str, str]] | None,
     attachments: List[Dict[str, Any]] | None,
 ) -> Dict[str, Any]:
-    return {
+    context = {
         "user_question": _clip(question, 1200),
         "conversation_mode": mode or "normal_followup",
         "current_conversation_history": _clip((history or [])[-6:], 900),
@@ -90,6 +100,34 @@ def build_llm_context(
         "knowledge_base_digest_for_fast_recall": _clip(report.get("knowledge_digest", {}), 1200),
         "attachments": _clip(attachments or [], 600),
     }
+    if _serialized_size(context) <= 24000:
+        return context
+
+    patient_keys = ("case_id", "age", "sex", "diagnosis", "history", "symptoms", "tumor", "imaging", "pathology", "tnm", "lymph_node", "surgery", "other_treatment", "followup", "free_text")
+    case_keys = ("case_id", "similarity", "diagnosis", "age", "sex", "tnm", "pathology", "imaging", "surgery", "other_treatment", "followup", "evidence_summary")
+    article_keys = ("article_id", "title", "year", "journal", "abstract", "summary", "value_points", "hit_terms")
+    compact = {
+        **context,
+        "current_conversation_history": [
+            _select_fields(item, ("role", "content"), 500) for item in (history or [])[-3:]
+        ],
+        "patient_input_current_chat_only": _select_fields(patient, patient_keys, 700),
+        "similar_cases_selected": [_select_fields(item, case_keys, 500) for item in report.get("similar_cases", [])[:3]],
+        "related_articles_selected": [_select_fields(item, article_keys, 500) for item in report.get("related_articles", [])[:3]],
+        "treatment_outcomes_from_similar_cases": _select_fields(report.get("treatment_outcomes", {}), tuple(list((report.get("treatment_outcomes") or {}).keys())[:8]), 300),
+        "knowledge_base_digest_for_fast_recall": _select_fields(report.get("knowledge_digest", {}), tuple(list((report.get("knowledge_digest") or {}).keys())[:10]), 250),
+        "attachments": [_select_fields(item, ("type", "filename", "url"), 300) for item in (attachments or [])[:4]],
+    }
+    if _serialized_size(compact) <= 24000:
+        return compact
+
+    compact["knowledge_base_digest_for_fast_recall"] = {}
+    compact["treatment_outcomes_from_similar_cases"] = {}
+    compact["current_conversation_history"] = compact["current_conversation_history"][-1:]
+    compact["patient_input_current_chat_only"] = _select_fields(patient, patient_keys, 350)
+    compact["similar_cases_selected"] = [_select_fields(item, case_keys, 240) for item in report.get("similar_cases", [])[:2]]
+    compact["related_articles_selected"] = [_select_fields(item, article_keys, 240) for item in report.get("related_articles", [])[:2]]
+    return compact
 
 
 
@@ -382,6 +420,15 @@ def classify_provider_error(exc: Exception, provider: str = "", request_id: str 
     low = raw.lower()
     error_name = type(exc).__name__.lower()
     request_note = f" 请求 ID：{request_id}。" if request_id else ""
+    if "429" in low or "rate limit" in low:
+        reset_match = re.search(r"limit\s+resets?\s+at\s*:\s*([^'\"},]+(?:UTC)?)", raw, re.I)
+        reset_note = f" 额度预计在 {reset_match.group(1).strip()} 重置。" if reset_match else ""
+        if "token" in low or "remaining: 0" in low:
+            return (
+                f"{provider or 'API'} 的 token 速率额度已用完。{reset_note}"
+                f"{request_note}请等待额度重置后再发送，系统不会自动重试或改用本地回答。"
+            )
+        return f"{provider or 'API'} 请求过于频繁，已触发速率限制。{reset_note}{request_note}请稍后再试，系统不会自动重试。"
     if "timeout" in error_name or "timed out" in low or "timeout" in low:
         return (
             f"{provider or 'API'} 请求超时。供应商可能已经接收并处理了请求，因此不要立即重复发送，以免再次计费。"
@@ -560,10 +607,10 @@ def ask_llm(
     except Exception as exc:
         error_message = classify_provider_error(exc, provider, request_id, base_url)
         return {
-            "provider": "local_fallback_after_api_error",
+            "provider": "api_error",
             "request_id": request_id,
             "error": error_message,
-            "answer": _clean_answer_text(error_message + "\n\n" + local_fallback_reply(question, report, mode_override)),
+            "answer": _clean_answer_text(error_message),
         }
 
 

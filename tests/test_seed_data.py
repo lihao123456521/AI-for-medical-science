@@ -61,11 +61,21 @@ class SeedDataTests(unittest.TestCase):
         self.assertTrue(any("identity" in item or "secret" in item for item in findings))
 
     def test_imaging_and_visit_numbers_are_redacted(self):
-        payload = build_seed_payload([{"imaging": "MRI（影像号：L00689150），门诊号: A123456"}], [])
+        payload = build_seed_payload([{"imaging": "MRI（影像号：L00689150），门诊号: A123456，超声号：24085998"}], [])
         text = json.dumps(payload, ensure_ascii=False)
 
         self.assertNotIn("L00689150", text)
         self.assertNotIn("A123456", text)
+        self.assertNotIn("24085998", text)
+
+    def test_source_filenames_are_removed_from_public_notes(self):
+        payload = build_seed_payload([{
+            "remarks": "来源文件：影像片子汇总.pdf（保存为 imaging-summary-617fbd6fbdd3.pdf）。原资料编号 1。"
+        }], [])
+        text = json.dumps(payload, ensure_ascii=False)
+
+        self.assertNotIn("影像片子汇总.pdf", text)
+        self.assertNotIn("imaging-summary-617fbd6fbdd3.pdf", text)
 
     def test_initialize_only_populates_empty_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

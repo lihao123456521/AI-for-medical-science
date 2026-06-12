@@ -23,8 +23,9 @@ WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:\\(?:[^\s，。；;]+\\)*[^\s，。；;]
 API_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|key)-[A-Za-z0-9_-]{12,}\b", re.I)
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)")
-LABELED_ID_RE = re.compile(r"(?:住院号|病案号|身份证号|身份证|影像号|检查号|门诊号)\s*[：:]?\s*[A-Za-z0-9-]{5,}", re.I)
+LABELED_ID_RE = re.compile(r"(?:(?:住院|病案|身份证|影像|检查|门诊|超声|病理|登记)号|身份证)\s*[：:]?\s*[A-Za-z0-9-]{5,}", re.I)
 EXACT_DATE_RE = re.compile(r"(?<!\d)(19\d{2}|20\d{2})[-/.年](?:0?[1-9]|1[0-2])[-/.月](?:0?[1-9]|[12]\d|3[01])日?(?!\d)")
+SOURCE_FILE_RE = re.compile(r"[^\s，。；;（）()]+\.(?:pdf|docx?|xlsx?|csv|txt|md|png|jpe?g|dcm)", re.I)
 
 
 def _sanitize_text(value: Any, identity_values: list[str] | None = None) -> str:
@@ -35,6 +36,7 @@ def _sanitize_text(value: Any, identity_values: list[str] | None = None) -> str:
     text = IDENTITY_LINE_RE.sub("[身份信息已脱敏]", text)
     text = LABELED_ID_RE.sub("[身份编号已脱敏]", text)
     text = WINDOWS_PATH_RE.sub("[本机路径已移除]", text)
+    text = SOURCE_FILE_RE.sub("[源文件名已移除]", text)
     text = API_KEY_RE.sub("[API密钥已移除]", text)
     text = EMAIL_RE.sub("[邮箱已脱敏]", text)
     text = PHONE_RE.sub("[电话已脱敏]", text)
@@ -101,9 +103,10 @@ def audit_seed_payload(payload: Any) -> list[str]:
                 visit(item, f"{path}[{index}]")
         elif isinstance(value, str):
             checks = (
-                ("identity", re.compile(r"(?:姓名|住院号|病案号|身份证号|影像号|检查号|门诊号|联系电话|家庭住址)\s*[：:]\s*(?!\[)[^\r\n]+")),
+                ("identity", re.compile(r"(?:姓名|住院号|病案号|身份证号|影像号|检查号|门诊号|超声号|病理号|登记号|联系电话|家庭住址)\s*[：:]\s*(?!\[)[^\r\n]+")),
                 ("secret", API_KEY_RE),
                 ("windows-path", WINDOWS_PATH_RE),
+                ("source-file", SOURCE_FILE_RE),
                 ("email", EMAIL_RE),
                 ("phone", PHONE_RE),
                 ("upload-reference", re.compile(r"/uploads/|\\uploads\\", re.I)),

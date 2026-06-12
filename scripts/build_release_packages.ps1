@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "2026.06.03"
+    [string]$Version = "2026.06.12-v38"
 )
 
 $ErrorActionPreference = "Stop"
@@ -63,6 +63,16 @@ function Copy-PackageTree {
     if ($LASTEXITCODE -gt 7) {
         throw "robocopy failed with exit code $LASTEXITCODE"
     }
+
+    # Runtime JSON names stay globally excluded. Only the audited public seed
+    # directory is copied back into downloadable packages.
+    $publicSeedSource = Join-Path $ProjectRoot "data\seed"
+    $publicSeedTarget = Join-Path $packageRoot "data\seed"
+    if (-not (Test-Path $publicSeedSource)) {
+        throw "Public seed directory is missing: $publicSeedSource"
+    }
+    New-Item -ItemType Directory -Force -Path $publicSeedTarget | Out-Null
+    Copy-Item -Path (Join-Path $publicSeedSource "*.json") -Destination $publicSeedTarget -Force
 
     $marker = Join-Path $packageRoot "PACKAGE_VERSION.txt"
     Set-Content -Path $marker -Value "AI for Medical Science $Version $Platform package" -Encoding UTF8

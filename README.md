@@ -54,6 +54,8 @@ Older version notes, release notes, deployment notes, and security notes are col
 
 The June 2026 imaging import added 17 annotated cases from `影像片子汇总.pdf` while preserving the existing 76 user cases and 230 articles. See [the V37 change notes](docs/notes/README_V37_CHANGES.md) for import, chat-routing, and API-request details.
 
+V38 bundles an audited, de-identified public seed library with **93 cases and 230 articles**. A fresh installation copies this library into its local runtime directory automatically, so downloaded copies can use the same knowledge base immediately. Existing local libraries are never overwritten. See [the V38 change notes](docs/notes/README_V38_CHANGES.md).
+
 ## Quick Start From Source
 
 ### Windows
@@ -105,6 +107,8 @@ The app can still run with local rules and knowledge-base retrieval when no API 
 
 API calls use bounded output lengths, provider-aware timeouts, streaming where supported, and no automatic SDK retries. A timeout message includes a request ID and warns that the provider may already have accepted the request, so users can check provider records before sending it again.
 
+Successfully tested API configurations can be switched from the remembered-configuration list without typing the key again. Full API keys remain only in the local runtime directory and are never included in the repository, public seed database, or release packages.
+
 ## Repository Structure
 
 ```text
@@ -116,6 +120,10 @@ API calls use bounded output lengths, provider-aware timeouts, streaming where s
 |   |-- llm_client.py
 |   `-- risk_engine.py
 |-- data/
+|   |-- seed/
+|   |   |-- user_cases.json
+|   |   |-- articles.json
+|   |   `-- manifest.json
 |   |-- knowledge_base.xlsx
 |   `-- knowledge_base_manifest.json
 |-- static/
@@ -132,6 +140,7 @@ API calls use bounded output lengths, provider-aware timeouts, streaming where s
 - Do not upload identifiable patient information to public GitHub repositories.
 - Do not commit `.env` or API keys.
 - Treat uploaded case files, runtime logs, and generated local data as sensitive. By default, user-fed cases and articles are stored in the Windows user directory `~/.uscc_scc_flask_data`.
+- The bundled seed library removes identity fields, exact clinical dates, local file paths, uploaded image references, and API credentials. Original clinical images are not published.
 - Public demonstrations should use synthetic or fully de-identified cases only.
 - Every output should be reviewed by qualified medical professionals before any real-world interpretation.
 

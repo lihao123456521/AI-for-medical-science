@@ -48,11 +48,11 @@ def build_request_policy(provider: str, mode: str) -> RequestPolicy:
     slower_compatible = {"deepseek", "openrouter", "fourrouter", "custom", "siliconflow", "volcengine"}
     return RequestPolicy(
         connect_timeout=10.0,
-        read_timeout=90.0 if provider_name in slower_compatible else 75.0,
+        read_timeout=60.0 if provider_name in slower_compatible else 45.0,
         write_timeout=30.0,
         pool_timeout=10.0,
         max_retries=0,
-        max_output_tokens=550 if mode_name == "initial_patient_analysis" else 380,
+        max_output_tokens=550 if mode_name == "initial_patient_analysis" else 350,
         stream=provider_name != "anthropic",
     )
 
@@ -603,6 +603,7 @@ def stream_ask_llm(
     Raises RuntimeError with a user-friendly message on API errors.
     When no API key is configured, yields the local fallback reply as a single chunk.
     """
+    request_id = uuid.uuid4().hex
     api_key = (api_key_override or os.getenv("OPENAI_API_KEY", "")).strip()
     provider = (provider_override or os.getenv("LLM_PROVIDER", "openai")).strip() or "openai"
     base_url = (base_url_override or os.getenv("LLM_BASE_URL", "")).strip()
@@ -662,4 +663,4 @@ def stream_ask_llm(
                 if delta:
                     yield delta
     except Exception as exc:
-        raise RuntimeError(classify_provider_error(exc, provider, "", base_url)) from exc
+        raise RuntimeError(classify_provider_error(exc, provider, request_id, base_url)) from exc

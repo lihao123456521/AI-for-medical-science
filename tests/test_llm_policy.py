@@ -8,14 +8,14 @@ class LlmPolicyTests(unittest.TestCase):
         policy = build_request_policy("deepseek", "general")
 
         self.assertEqual(policy.max_retries, 0)
-        self.assertEqual(policy.max_output_tokens, 600)
-        self.assertGreaterEqual(policy.read_timeout, 90)
+        self.assertEqual(policy.max_output_tokens, 350)
+        self.assertLessEqual(policy.read_timeout, 75)
         self.assertTrue(policy.stream)
 
     def test_initial_analysis_has_larger_but_bounded_output(self):
         policy = build_request_policy("openai", "initial_patient_analysis")
 
-        self.assertEqual(policy.max_output_tokens, 900)
+        self.assertEqual(policy.max_output_tokens, 550)
         self.assertEqual(policy.max_retries, 0)
         self.assertTrue(policy.stream)
 

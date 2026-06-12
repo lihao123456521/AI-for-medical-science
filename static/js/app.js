@@ -402,7 +402,14 @@ async function streamChat(url, payload, typingId) {
           });
           done = true;
         } else if (evt.type === 'error') {
-          throw new Error(evt.error || '后台生成出错');
+          const errorText = evt.error || '后台生成出错';
+          if (answerText) {
+            answerText += `\n\n（${errorText} 已保留此前生成的内容。）`;
+            replaceMessage(typingId, { content: normalizeBackendMessage(answerText), report: { similar_cases: [], related_articles: [] } });
+            done = true;
+          } else {
+            throw new Error(errorText);
+          }
         }
       }
     }

@@ -19,6 +19,7 @@ class DesktopDeployContractTests(unittest.TestCase):
         for private_name in (".env", "api_config.json", "api_config_history.json", "uploads"):
             self.assertIn(private_name, source)
         self.assertIn("Win32_Process", source)
+        self.assertIn("$_.ProcessId -ne $PID", source)
 
     def test_fixture_deploy_replaces_app_but_preserves_private_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

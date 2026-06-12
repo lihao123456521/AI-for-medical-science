@@ -2212,7 +2212,17 @@ def api_llm_config_use():
 
 @app.delete("/api/llm/config")
 def api_llm_config_clear():
-    """Clear backend-saved API config so the app really returns to local mode."""
+    payload = request.get_json(force=True, silent=True) or {}
+    config_id = str(payload.get("config_id") or "").strip()
+    if config_id:
+        try:
+            result = api_config_store.delete(config_id)
+        except KeyError as exc:
+            return jsonify({"ok": False, "error": str(exc).strip("'")}), 404
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        return jsonify({"ok": True, **result, "message": "已删除该本机 API 配置。"})
+
     api_config_store.clear_all()
     return jsonify({"ok": True, "message": "已清除本机 API 配置及历史记录。"})
 
@@ -2353,7 +2363,6 @@ def api_chat_stream():
     resp = Response(stream_with_context(generate()), mimetype="text/event-stream")
     resp.headers["Cache-Control"] = "no-cache"
     resp.headers["X-Accel-Buffering"] = "no"
-    resp.headers["Connection"] = "keep-alive"
     return resp
 
 

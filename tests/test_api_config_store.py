@@ -80,6 +80,33 @@ class ApiConfigStoreTests(unittest.TestCase):
         self.assertFalse((Path(self.temp.name) / "api_config.json").exists())
         self.assertFalse((Path(self.temp.name) / "api_config_history.json").exists())
 
+    def test_delete_non_current_config_keeps_active_config(self):
+        first = self.store.save_verified({"api_key": "first-placeholder-111111", "provider": "openai", "model": "gpt-4.1-mini"})
+        second = self.store.save_verified({"api_key": "second-placeholder-222222", "provider": "deepseek", "model": "deepseek-chat"})
+
+        result = self.store.delete(first["config_id"])
+
+        self.assertEqual(result["config"]["config_id"], second["config_id"])
+        self.assertEqual([row["config_id"] for row in result["history"]], [second["config_id"]])
+        self.assertEqual(self.store.resolve_request_config({"use_saved_config": True})["api_key"], "second-placeholder-222222")
+
+    def test_delete_current_config_activates_most_recent_remaining(self):
+        first = self.store.save_verified({"api_key": "first-placeholder-111111", "provider": "openai", "model": "gpt-4.1-mini"})
+        second = self.store.save_verified({"api_key": "second-placeholder-222222", "provider": "deepseek", "model": "deepseek-chat"})
+
+        result = self.store.delete(second["config_id"])
+
+        self.assertEqual(result["config"]["config_id"], first["config_id"])
+        self.assertEqual(self.store.resolve_request_config({"use_saved_config": True})["api_key"], "first-placeholder-111111")
+
+    def test_delete_only_config_clears_current_and_history(self):
+        only = self.store.save_verified({"api_key": "only-placeholder-111111", "provider": "openai", "model": "gpt-4.1-mini"})
+
+        result = self.store.delete(only["config_id"])
+
+        self.assertEqual(result, {"config": {}, "history": []})
+        self.assertFalse((Path(self.temp.name) / "api_config.json").exists())
+
     def test_files_are_local_json_and_plaintext_never_appears_in_masked_payload(self):
         secret = "local-secret-never-return-1234"
         self.store.save_verified({"api_key": secret, "provider": "openai", "model": "gpt-4.1-mini"})

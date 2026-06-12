@@ -50,6 +50,20 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn("local_fallback_after_api_error", stream_body)
         self.assertNotIn("已使用本地", stream_body)
 
+    def test_remembered_api_history_has_independent_delete_action(self):
+        history_body = self._function_body("renderApiHistoryList")
+
+        self.assertIn("api-history-delete", history_body)
+        self.assertIn("deleteRememberedApiConfig", history_body)
+        self.assertIn("event.stopPropagation()", history_body)
+
+    def test_delete_remembered_config_calls_backend_with_config_id(self):
+        body = self._function_body("deleteRememberedApiConfig")
+
+        self.assertIn("method:'DELETE'", body)
+        self.assertIn("config_id", body)
+        self.assertIn("fetchRememberedApiConfig", body)
+
 
 if __name__ == "__main__":
     unittest.main()

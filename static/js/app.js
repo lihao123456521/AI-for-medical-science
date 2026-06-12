@@ -641,14 +641,34 @@ function renderApiHistoryList() {
     return;
   }
   for (const cfg of rows) {
-    const item = document.createElement('button');
-    item.type = 'button';
+    const item = document.createElement('div');
     item.className = 'api-history-item';
     const title = [cfg.provider, cfg.model].filter(Boolean).join(' / ') || '未命名配置';
     const meta = [cfg.api_key_masked, cfg.base_url, cfg.updated_at].filter(Boolean).join(' ｜ ');
-    item.innerHTML = `<b>${escapeHtml(title)}</b><small>${escapeHtml(meta)}</small>`;
-    item.addEventListener('click', () => useRememberedApiConfig(cfg.config_id));
+    item.innerHTML = `<button type="button" class="api-history-use"><b>${escapeHtml(title)}</b><small>${escapeHtml(meta)}</small></button><button type="button" class="api-history-delete" title="删除该配置">删除</button>`;
+    item.querySelector('.api-history-use').addEventListener('click', () => useRememberedApiConfig(cfg.config_id));
+    item.querySelector('.api-history-delete').addEventListener('click', event => {
+      event.stopPropagation();
+      deleteRememberedApiConfig(cfg.config_id, title);
+    });
     els.apiHistoryList.appendChild(item);
+  }
+}
+
+async function deleteRememberedApiConfig(configId, title='该配置') {
+  if (!configId || !window.confirm(`确定删除已记住的 API 配置“${title}”吗？`)) return;
+  if (els.apiHistoryStatus) els.apiHistoryStatus.textContent = '正在删除配置...';
+  try {
+    const res = await fetch('/api/llm/config', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({config_id: configId})});
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '删除失败');
+    await fetchRememberedApiConfig();
+    if (rememberedApiConfig?.config_id) localStorage.setItem(API_CONFIG_ID_STORAGE, rememberedApiConfig.config_id);
+    else localStorage.removeItem(API_CONFIG_ID_STORAGE);
+    renderApiHistoryList();
+    if (els.apiHistoryStatus) els.apiHistoryStatus.textContent = data.message || '配置已删除。';
+  } catch (err) {
+    if (els.apiHistoryStatus) els.apiHistoryStatus.textContent = `删除失败：${err.message}`;
   }
 }
 

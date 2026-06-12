@@ -145,6 +145,32 @@ class ApiConfigStore:
             return {key: str(saved.get(key) or "").strip() for key in ("api_key", "provider", "model", "base_url")}
         return request_data
 
+    def delete(self, config_id: str) -> dict[str, Any]:
+        target_id = str(config_id or "").strip()
+        if not target_id:
+            raise ValueError("缺少 API 配置编号。")
+
+        current = self._current()
+        rows = [row for row in self._history() if str(row.get("config_id")) != target_id]
+        existed = len(rows) != len(self._history()) or str(current.get("config_id")) == target_id
+        if not existed:
+            raise KeyError("未找到该 API 配置。")
+
+        if rows:
+            self._write(self.history_path, rows[:12])
+        else:
+            self.history_path.unlink(missing_ok=True)
+            self.history_path.with_suffix(self.history_path.suffix + ".bak").unlink(missing_ok=True)
+
+        if str(current.get("config_id")) == target_id:
+            if rows:
+                self._write(self.current_path, rows[0])
+            else:
+                self.current_path.unlink(missing_ok=True)
+                self.current_path.with_suffix(self.current_path.suffix + ".bak").unlink(missing_ok=True)
+
+        return {"config": self.current_masked(), "history": self.history_masked()}
+
     def clear_all(self) -> None:
         for path in (self.current_path, self.history_path):
             try:

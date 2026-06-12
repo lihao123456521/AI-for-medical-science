@@ -22,3 +22,5 @@ data/deleted_cases.json
 data/articles.json
 data/api_config.json
 data/api_config_history.json
+!data/seed/
+!data/seed/*.json

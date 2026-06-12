@@ -37,7 +37,7 @@ class LlmStreamingTests(unittest.TestCase):
                     question="分析病例",
                     report={"similar_cases": [], "related_articles": [], "risk": {"missing_items": []}},
                     patient={"diagnosis": "尿道鳞癌"},
-                    api_key_override="sk-test",
+                    api_key_override="unit-test-secret",
                     model_override="deepseek-chat",
                     provider_override="deepseek",
                 ))

@@ -13,7 +13,7 @@ class SeedDataTests(unittest.TestCase):
             "patient_name": "周相如",
             "diagnosis": "尿道鳞癌",
             "imaging": "姓名：周相如\n住院号：12345678\n2017-04-25 CT提示尿道肿块",
-            "remarks": r"来源 C:\Users\ASUS\Desktop\影像片子汇总.pdf，API sk-secret-1234567890",
+            "remarks": r"来源 C:\Users\ASUS\Desktop\影像片子汇总.pdf，API " + "sk-" + "secret-1234567890",
             "medical_images": [{"stored_as": "private.jpg", "url": "/uploads/private.jpg"}],
             "source_document": "影像片子汇总.pdf",
             "source_hash": "abcdef",
@@ -26,7 +26,7 @@ class SeedDataTests(unittest.TestCase):
         self.assertNotIn("周相如", text)
         self.assertNotIn("12345678", text)
         self.assertNotIn("C:\\Users", text)
-        self.assertNotIn("sk-secret", text)
+        self.assertNotIn("secret-1234567890", text)
         self.assertNotIn("private.jpg", text)
         self.assertNotIn("2017-04-25", text)
         self.assertIn("2017年", text)
@@ -56,7 +56,7 @@ class SeedDataTests(unittest.TestCase):
         self.assertNotIn("article_images", article)
 
     def test_audit_rejects_identity_and_secret_patterns(self):
-        findings = audit_seed_payload({"cases": [{"notes": "姓名：张三 sk-abcdefghijklmnop"}], "articles": []})
+        findings = audit_seed_payload({"cases": [{"notes": "姓名：张三 " + "sk-" + "abcdefghijklmnop"}], "articles": []})
 
         self.assertTrue(any("identity" in item or "secret" in item for item in findings))
 

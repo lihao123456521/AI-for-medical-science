@@ -4,6 +4,7 @@ const API_MODEL_STORAGE = 'uscc_openai_model';
 const API_PROVIDER_STORAGE = 'uscc_api_provider';
 const API_BASE_URL_STORAGE = 'uscc_api_base_url';
 const API_CUSTOM_MODEL_STORAGE = 'uscc_api_custom_model';
+const API_CONFIG_ID_STORAGE = 'uscc_api_config_id';
 
 const els = {
   sidebar: document.getElementById('sidebar'),
@@ -437,7 +438,8 @@ function apiPayloadExtras() {
   const storedModel = localStorage.getItem(API_MODEL_STORAGE) || '';
   const customModel = localStorage.getItem(API_CUSTOM_MODEL_STORAGE) || '';
   return {
-    api_key: localStorage.getItem(API_KEY_STORAGE) || '',
+    use_saved_config: Boolean(rememberedApiConfig?.config_id || localStorage.getItem(API_CONFIG_ID_STORAGE)),
+    config_id: rememberedApiConfig?.config_id || localStorage.getItem(API_CONFIG_ID_STORAGE) || '',
     provider,
     base_url: localStorage.getItem(API_BASE_URL_STORAGE) || '',
     model: storedModel === '__custom__' ? customModel : storedModel,
@@ -615,6 +617,7 @@ function fillApiModalFromConfig(cfg, note='') {
     }
   }
   if (els.apiBaseUrlInput) els.apiBaseUrlInput.value = cfg.base_url || '';
+  if (cfg.config_id) localStorage.setItem(API_CONFIG_ID_STORAGE, cfg.config_id);
   if (els.apiKeyInput) els.apiKeyInput.value = '';
   if (els.apiKeyStatus) els.apiKeyStatus.textContent = note || `已调用已记住配置：${cfg.provider || ''} / ${cfg.model || ''}。API Key 已由后端记住，无需重新输入；若要更换 Key，再手动填写后保存即可。`;
 }
@@ -693,7 +696,8 @@ function refreshBaseUrlForProvider() {
 async function openApiModal() {
   await fetchRememberedApiConfig();
   const provider = localStorage.getItem(API_PROVIDER_STORAGE) || rememberedApiConfig?.provider || 'openai';
-  els.apiKeyInput.value = localStorage.getItem(API_KEY_STORAGE) || '';
+  localStorage.removeItem(API_KEY_STORAGE);
+  els.apiKeyInput.value = '';
   if (els.apiProviderSelect) els.apiProviderSelect.value = provider;
   refreshApiModelOptions(provider, localStorage.getItem(API_MODEL_STORAGE) || rememberedApiConfig?.model || '');
   refreshBaseUrlForProvider();
@@ -712,6 +716,8 @@ function collectApiConfigFromModal() {
   const customModel = els.apiCustomModelInput?.value.trim() || '';
   return {
     api_key: els.apiKeyInput.value.trim(),
+    use_saved_config: Boolean(rememberedApiConfig?.config_id || localStorage.getItem(API_CONFIG_ID_STORAGE)),
+    config_id: rememberedApiConfig?.config_id || localStorage.getItem(API_CONFIG_ID_STORAGE) || '',
     provider,
     model: selectedModel === '__custom__' ? customModel : selectedModel,
     selected_model: selectedModel,
@@ -721,7 +727,7 @@ function collectApiConfigFromModal() {
 }
 async function testApiConnection() {
   const cfg = collectApiConfigFromModal();
-  if (!cfg.api_key) { els.apiKeyStatus.textContent = '请先填写 API Key。'; return false; }
+  if (!cfg.api_key && !cfg.use_saved_config) { els.apiKeyStatus.textContent = '请先填写 API Key，或调用一个已记住配置。'; return false; }
   if (!cfg.model) { els.apiKeyStatus.textContent = '请先选择或填写模型。'; return false; }
   els.apiKeyStatus.textContent = '正在联系后台并测试供应商接口...';
   try {
@@ -737,13 +743,13 @@ async function testApiConnection() {
 }
 async function saveApiConfig() {
   const cfg = collectApiConfigFromModal();
-  if (cfg.api_key) localStorage.setItem(API_KEY_STORAGE, cfg.api_key);
+  localStorage.removeItem(API_KEY_STORAGE);
   localStorage.setItem(API_PROVIDER_STORAGE, cfg.provider);
   localStorage.setItem(API_MODEL_STORAGE, cfg.selected_model);
   localStorage.setItem(API_BASE_URL_STORAGE, cfg.base_url);
   localStorage.setItem(API_CUSTOM_MODEL_STORAGE, cfg.custom_model);
-  els.apiKeyStatus.textContent = cfg.api_key ? `正在保存到本地 Flask 后端并测试 ${cfg.provider}...` : `未填写 Key，仅保存浏览器模型配置。`;
-  if (!cfg.api_key) return;
+  els.apiKeyStatus.textContent = cfg.api_key ? `正在保存到本地 Flask 后端并测试 ${cfg.provider}...` : (cfg.use_saved_config ? '正在使用本机已记住的 Key 更新配置...' : '未填写 Key，无法创建新的 API 配置。');
+  if (!cfg.api_key && !cfg.use_saved_config) return;
   try {
     const res = await fetchWithTimeout('/api/llm/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cfg)}, 35000);
     const data = await res.json();
@@ -756,7 +762,7 @@ async function saveApiConfig() {
   }
 }
 async function clearApiConfig() {
-  localStorage.removeItem(API_KEY_STORAGE); localStorage.removeItem(API_MODEL_STORAGE); localStorage.removeItem(API_PROVIDER_STORAGE); localStorage.removeItem(API_BASE_URL_STORAGE); localStorage.removeItem(API_CUSTOM_MODEL_STORAGE);
+  localStorage.removeItem(API_KEY_STORAGE); localStorage.removeItem(API_CONFIG_ID_STORAGE); localStorage.removeItem(API_MODEL_STORAGE); localStorage.removeItem(API_PROVIDER_STORAGE); localStorage.removeItem(API_BASE_URL_STORAGE); localStorage.removeItem(API_CUSTOM_MODEL_STORAGE);
   els.apiKeyInput.value = ''; if (els.apiProviderSelect) els.apiProviderSelect.value = 'openai';
   refreshApiModelOptions('openai', 'gpt-4.1-mini'); refreshBaseUrlForProvider();
   if (els.apiCustomModelInput) els.apiCustomModelInput.value = '';
@@ -859,4 +865,5 @@ els.fontModal?.addEventListener('click', e => { if (e.target === els.fontModal) 
 els.saveFontConfig?.addEventListener('click', saveFontSettings);
 document.querySelectorAll('[data-prompt]').forEach(btn => btn.addEventListener('click', () => { els.input.value = btn.dataset.prompt; resizeInput(); els.input.focus(); }));
 
+localStorage.removeItem(API_KEY_STORAGE);
 applyFontSettings(); loadMascot(); fetchRememberedApiConfig(); loadChats(); renderHistory(); renderChat(); loadSummary(); resizeInput();

@@ -2195,7 +2195,7 @@ def api_llm_config_clear():
 @app.post("/api/llm/config")
 def api_llm_config_save():
     payload = request.get_json(force=True, silent=True) or {}
-    draft = {k: str(payload.get(k) or "").strip() for k in ["api_key", "provider", "model", "base_url"]}
+    draft = api_config_store.resolve_request_config(payload)
     test = test_llm_connection(
         api_key=draft.get("api_key", ""),
         provider=draft.get("provider", "openai"),
@@ -2211,11 +2211,12 @@ def api_llm_config_save():
 @app.post("/api/llm/test")
 def api_llm_test():
     payload = request.get_json(force=True, silent=True) or {}
+    resolved = api_config_store.resolve_request_config(payload)
     result = test_llm_connection(
-        api_key=str(payload.get("api_key") or ""),
-        provider=str(payload.get("provider") or "openai"),
-        model=str(payload.get("model") or ""),
-        base_url=str(payload.get("base_url") or ""),
+        api_key=resolved["api_key"],
+        provider=resolved["provider"],
+        model=resolved["model"],
+        base_url=resolved["base_url"],
     )
     status = 200 if result.get("ok") else 400
     return jsonify(result), status

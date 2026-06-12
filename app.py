@@ -24,6 +24,7 @@ from core.case_parser import parse_case_file
 from core.chat_routing import classify_chat_request, has_detailed_case
 from core.api_config_store import ApiConfigStore
 from core.evidence_context import build_evidence_report
+from core.seed_data import initialize_runtime_from_seed
 
 load_dotenv()
 
@@ -37,6 +38,7 @@ if not DATA_PATH.is_absolute():
 PERSISTENT_DATA_DIR = Path(os.getenv("USCC_DATA_DIR", Path.home() / ".uscc_scc_flask_data"))
 PERSISTENT_DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROJECT_DATA_DIR = BASE_DIR / "data"
+PUBLIC_SEED_DIR = PROJECT_DATA_DIR / "seed"
 UPLOAD_DIR = PERSISTENT_DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CANDIDATE_BATCH_DIR = PERSISTENT_DATA_DIR / "candidate_batches"
@@ -244,7 +246,8 @@ def _sanitize_case_label(label: str | None) -> str:
 
 
 def _is_user_case(rec: CaseRecord) -> bool:
-    return str(getattr(rec, "case_id", "")).startswith("USER-") or str(getattr(rec, "remarks", "")).find("由对话或上传文件加入") >= 0
+    case_id = str(getattr(rec, "case_id", ""))
+    return case_id.startswith(("USER-", "SEED-CASE-")) or str(getattr(rec, "remarks", "")).find("由对话或上传文件加入") >= 0
 
 def _normalize_legacy_user_labels() -> None:
     """Migrate old default display label to the new concise label.
@@ -670,12 +673,14 @@ def _ensure_storage_files() -> None:
     _deduplicate_saved_user_cases()
     _migrate_uploads_if_needed()
     _save_library_snapshot()
+    previous_state = _read_json_with_backup(MIGRATION_STATE_PATH, {})
     state = {
-        "storage_version": "v36",
+        **(previous_state if isinstance(previous_state, dict) else {}),
+        "storage_version": "v38",
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "data_dir": str(PERSISTENT_DATA_DIR),
-        "source_of_truth": "persistent_only",
-        "note": "Bundled data/*.json is ignored at runtime; user cases/articles are loaded only from the persistent data directory.",
+        "source_of_truth": "persistent_with_public_seed_bootstrap",
+        "note": "Fresh installs initialize from audited data/seed JSON; existing persistent data is never overwritten.",
     }
     _atomic_write_json(MIGRATION_STATE_PATH, state)
     _write_storage_manifest()
@@ -1571,7 +1576,11 @@ def _find_case(case_id: str):
     return None
 
 
+initialize_runtime_from_seed(PERSISTENT_DATA_DIR, PUBLIC_SEED_DIR)
 _ensure_storage_files()
+_migration_state = _read_json_with_backup(MIGRATION_STATE_PATH, {})
+if isinstance(_migration_state, dict) and _migration_state.get("public_seed_case_count"):
+    kb.records = []
 _load_user_cases()
 _normalize_legacy_user_labels()
 _apply_deleted_case_filter()

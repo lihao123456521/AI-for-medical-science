@@ -43,7 +43,9 @@ Copy-Tree $runtime $runtimeBackup
 if (-not $SkipProcessStop) {
     $escapedInstall = [Regex]::Escape($install.TrimEnd('\'))
     Get-CimInstance Win32_Process | Where-Object {
-        $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine -match $escapedInstall
+        $_.ProcessId -ne $PID -and
+        $_.Name -in @("python.exe", "pythonw.exe") -and
+        $_.CommandLine -and $_.CommandLine -match $escapedInstall
     } | ForEach-Object {
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }

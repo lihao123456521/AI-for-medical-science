@@ -20,6 +20,7 @@ class DesktopDeployContractTests(unittest.TestCase):
             self.assertIn(private_name, source)
         self.assertIn("Win32_Process", source)
         self.assertIn("$_.ProcessId -ne $PID", source)
+        self.assertIn("$_.Name -in @(\"python.exe\", \"pythonw.exe\")", source)
 
     def test_fixture_deploy_replaces_app_but_preserves_private_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

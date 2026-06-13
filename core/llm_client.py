@@ -53,7 +53,7 @@ def build_request_policy(provider: str, mode: str) -> RequestPolicy:
         write_timeout=30.0,
         pool_timeout=10.0,
         max_retries=0,
-        max_output_tokens=1500 if mode_name == "initial_patient_analysis" else 1000,
+        max_output_tokens=2500 if mode_name == "initial_patient_analysis" else 2000,
         stream=provider_name != "anthropic",
     )
 

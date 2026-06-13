@@ -354,7 +354,12 @@ function updateStreamingBubble(id, text) {
 
 async function streamChat(url, payload, typingId) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 210000);
+  let timer = null;
+  const resetIdleTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(), 210000);
+  };
+  resetIdleTimer();
   let answerText = '';
   try {
     const res = await fetch(url, {
@@ -375,6 +380,7 @@ async function streamChat(url, payload, typingId) {
     while (!done) {
       const { done: streamDone, value } = await reader.read();
       if (streamDone) break;
+      resetIdleTimer();
       buffer += decoder.decode(value, { stream: true });
       const parts = buffer.split('\n\n');
       buffer = parts.pop() || '';

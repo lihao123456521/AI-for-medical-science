@@ -63,6 +63,13 @@ class ChatRoute:
     use_article_context: bool = False
 
 
+def select_llm_attachments(attachments: list[dict[str, Any]] | None, route: ChatRoute) -> list[dict[str, Any]]:
+    items = [item for item in (attachments or []) if isinstance(item, dict)]
+    if route.use_case_context or any(item.get("type") == "image" for item in items):
+        return items
+    return []
+
+
 def has_detailed_case(patient: dict[str, Any] | None) -> bool:
     values = patient if isinstance(patient, dict) else {}
     structured_count = sum(bool(str(values.get(key) or "").strip()) for key in CASE_DETAIL_KEYS)

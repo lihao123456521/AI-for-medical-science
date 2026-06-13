@@ -1,6 +1,6 @@
 import unittest
 
-from core.chat_routing import classify_chat_request, has_detailed_case
+from core.chat_routing import classify_chat_request, has_detailed_case, select_llm_attachments
 from core.llm_client import local_fallback_reply
 
 
@@ -55,6 +55,19 @@ class ChatRoutingTests(unittest.TestCase):
         answer = local_fallback_reply("手术是什么意思？", report, "general")
 
         self.assertNotIn("相似病例与治疗转归", answer)
+
+
+    def test_image_attachment_is_forwarded_even_for_general_route(self):
+        route = classify_chat_request("请观察这张图片", has_confirmed_case=False)
+        attachments = [{"type": "image", "stored_as": "scan.jpg"}]
+
+        self.assertEqual(select_llm_attachments(attachments, route), attachments)
+
+    def test_non_image_attachment_still_requires_case_context(self):
+        route = classify_chat_request("Python如何读取文件？", has_confirmed_case=False)
+        attachments = [{"type": "pdf", "stored_as": "report.pdf"}]
+
+        self.assertEqual(select_llm_attachments(attachments, route), [])
 
 
 if __name__ == "__main__":

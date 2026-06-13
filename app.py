@@ -21,7 +21,7 @@ from core.data_loader import KnowledgeBase, CaseRecord, case_sort_key
 from core.risk_engine import generate_traceable_report
 from core.llm_client import ask_llm, test_llm_connection, stream_ask_llm
 from core.case_parser import parse_case_file
-from core.chat_routing import classify_chat_request, has_detailed_case
+from core.chat_routing import classify_chat_request, has_detailed_case, select_llm_attachments
 from core.api_config_store import ApiConfigStore
 from core.evidence_context import build_evidence_report
 from core.seed_data import initialize_runtime_from_seed
@@ -2290,7 +2290,7 @@ def api_chat():
     report = _build_chat_report(route, question, patient, attachments)
     llm_patient = patient if route.use_case_context else {}
     llm_history = history if route.use_case_context else []
-    llm_attachments = attachments if route.use_case_context else []
+    llm_attachments = select_llm_attachments(attachments, route)
     llm_result = ask_llm(question=question, report=report, patient=llm_patient, history=llm_history, attachments=llm_attachments, api_key_override=api_key, model_override=model, mode_override=route.mode, provider_override=provider, base_url_override=base_url)
     if added_case:
         llm_result["answer"] = f"已将当前对话整理并加入知识库：{added_case.case_id}。\n\n" + llm_result.get("answer", "")
@@ -2327,7 +2327,7 @@ def api_chat_stream():
 
     llm_patient = patient if route.use_case_context else {}
     llm_history = history if route.use_case_context else []
-    llm_attachments = attachments if route.use_case_context else []
+    llm_attachments = select_llm_attachments(attachments, route)
     is_local_fallback = not api_key
     added_case_dict = _case_to_public_dict(added_case) if added_case else None
     added_case_prefix = f"已将当前对话整理并加入知识库：{added_case.case_id}。\n\n" if added_case else ""

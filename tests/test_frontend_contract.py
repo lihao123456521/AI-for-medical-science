@@ -50,6 +50,12 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn("local_fallback_after_api_error", stream_body)
         self.assertNotIn("已使用本地", stream_body)
 
+    def test_stream_timeout_is_reset_when_data_arrives(self):
+        stream_body = self._function_body("streamChat")
+
+        self.assertIn("resetIdleTimer", stream_body)
+        self.assertGreaterEqual(stream_body.count("resetIdleTimer()"), 2)
+
     def test_remembered_api_history_has_independent_delete_action(self):
         history_body = self._function_body("renderApiHistoryList")
 

@@ -46,7 +46,7 @@ def _clean(value: Any) -> str:
     except Exception:
         pass
     text = str(value).strip()
-    if text.lower() in {"nan", "none", "null", "nat", "无", "/", "\\"}:
+    if text.lower() in {"nan", "none", "null", "nat", "/", "\\"}:
         return ""
     return re.sub(r"\s+", " ", text)
 

@@ -25,6 +25,12 @@ CASE_REFERENCE_TERMS = (
     "他的病",
     "她的病",
 )
+
+DECISION_TERMS = (
+    "怎么", "如何", "为什么", "选", "推荐", "建议", "怎么办", "要不要", "是否",
+    "适合", "能否", "能不能", "需要", "下一步", "预后", "严重", "风险", "哪种", "该不该",
+)
+
 CASE_DETAIL_KEYS = (
     "age",
     "sex",
@@ -98,6 +104,8 @@ def classify_chat_request(
         return ChatRoute(True, False, "case_followup", True)
 
     if any(term.lower() in q.lower() for term in MEDICAL_TERMS):
+        if has_confirmed_case and any(term in q for term in DECISION_TERMS):
+            return ChatRoute(True, False, "case_followup", True)
         return ChatRoute(False, False, "general_medical", True)
 
     return ChatRoute(False, False, "general", False)

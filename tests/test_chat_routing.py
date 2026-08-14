@@ -36,6 +36,19 @@ class ChatRoutingTests(unittest.TestCase):
         self.assertEqual(route.mode, "general_medical")
         self.assertTrue(route.use_article_context)
 
+    def test_confirmed_patient_medical_followup_keeps_case_context(self):
+        route = classify_chat_request("手术怎么选？", has_confirmed_case=True)
+
+        self.assertTrue(route.use_case_context)
+        self.assertFalse(route.retrieve_evidence)
+        self.assertEqual(route.mode, "case_followup")
+
+    def test_unconfirmed_patient_followup_stays_general(self):
+        route = classify_chat_request("手术怎么选？", has_confirmed_case=False)
+
+        self.assertFalse(route.use_case_context)
+        self.assertEqual(route.mode, "general_medical")
+
     def test_unrelated_question_uses_no_medical_database_context(self):
         route = classify_chat_request("Python如何读取PDF？", has_confirmed_case=False)
 

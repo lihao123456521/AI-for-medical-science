@@ -55,6 +55,15 @@ def _sanitize_value(value: Any, identity_values: list[str] | None = None) -> Any
     return value
 
 
+def sanitize_for_external_llm(text: str) -> str:
+    """统一出站脱敏：把病例文本/上下文发送给第三方 LLM 前调用。
+
+    用于对真实患者资料在离开本机前做去标识化（姓名、病案号、身份证号、
+    电话、邮箱、精确日期、本机路径、API Key、源文件名等）。
+    """
+    return _sanitize_text(text)
+
+
 def _public_case(row: dict[str, Any], index: int) -> dict[str, Any]:
     identities = [str(row.get("patient_name") or "").strip()]
     result: dict[str, Any] = {"case_id": f"SEED-CASE-{index:03d}"}

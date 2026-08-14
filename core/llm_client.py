@@ -12,6 +12,8 @@ from pathlib import Path
 import re
 import uuid
 
+from core.seed_data import sanitize_for_external_llm
+
 SYSTEM_INSTRUCTIONS = """
 你是泌尿外科科研项目中的男性尿道鳞状细胞癌（SCC）病例问答与知识库检索助手。
 任务：
@@ -537,6 +539,7 @@ def ask_llm(
             attachments=attachments,
         )
         context_text = json.dumps(context, ensure_ascii=False)
+        context_text = sanitize_for_external_llm(context_text)
         if provider == "anthropic":
             # Native Anthropic Messages API. This supports Claude/Claude Code
             # model aliases such as claude-opus-4-7 and claude-sonnet-4-6.
@@ -707,6 +710,7 @@ def stream_ask_llm(
         attachments=attachments,
     )
     context_text = json.dumps(context, ensure_ascii=False)
+    context_text = sanitize_for_external_llm(context_text)
 
     try:
         if provider == "anthropic":

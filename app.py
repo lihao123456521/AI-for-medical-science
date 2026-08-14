@@ -76,13 +76,13 @@ def _build_chat_report(route, question: str, patient: Dict[str, Any], attachment
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
-app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "512")) * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "100")) * 1024 * 1024
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".dcm"}
 CASE_TABLE_EXTENSIONS = {".xlsx", ".xls", ".csv", ".docx", ".doc", ".pdf", ".txt", ".md"}
 ARTICLE_EXTENSIONS = {".txt", ".docx", ".pdf", ".xlsx", ".xls", ".csv", ".md"}
 ALL_UPLOAD_EXTENSIONS = IMAGE_EXTENSIONS | CASE_TABLE_EXTENSIONS
-MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "500"))
+MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "50"))
 MAX_TEXT_CHARS_PER_FILE = int(os.getenv("MAX_TEXT_CHARS_PER_FILE", "500000"))
 
 kb = KnowledgeBase(DATA_PATH)
@@ -2444,11 +2444,16 @@ def api_upload():
                 "note": f"已自动识别 {parsed.get('field_count', 0)} 个字段，并纳入当前对话上下文。",
             })
     elif suffix in IMAGE_EXTENSIONS:
-        img_kind = "病理/影像图片" if suffix != ".dcm" else "DICOM 影像文件"
-        response.update({
-            "type": "image",
-            "note": f"{img_kind}已保存。若配置了多模态 API，后续问答会把该图片作为当前对话附件传入模型。",
-        })
+        if suffix == ".dcm":
+            response.update({
+                "type": "image",
+                "note": "DICOM 文件已保存为病例附件。当前版本仅保存、不进行 AI 图像分析；如需多模态分析，请先导出为 PNG/JPG 后上传。",
+            })
+        else:
+            response.update({
+                "type": "image",
+                "note": "病理/影像图片已保存。若配置了多模态 API，后续问答会把该图片作为当前对话附件传入模型。",
+            })
     return jsonify(response)
 
 

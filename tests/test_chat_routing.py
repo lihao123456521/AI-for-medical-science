@@ -36,6 +36,26 @@ class ChatRoutingTests(unittest.TestCase):
         self.assertEqual(route.mode, "general_medical")
         self.assertTrue(route.use_article_context)
 
+    def test_short_medical_followup_keeps_confirmed_case_context(self):
+        for question in ("TNM 呢？", "病理呢？", "MRI 表现？", "淋巴结情况如何？"):
+            route = classify_chat_request(question, has_confirmed_case=True)
+
+            self.assertTrue(route.use_case_context, question)
+            self.assertFalse(route.retrieve_evidence, question)
+            self.assertEqual(route.mode, "case_followup", question)
+
+    def test_definition_question_stays_general_even_with_confirmed_case(self):
+        route = classify_chat_request("什么是鳞癌？", has_confirmed_case=True)
+
+        self.assertFalse(route.use_case_context)
+        self.assertEqual(route.mode, "general_medical")
+
+    def test_medical_question_without_confirmed_case_stays_general(self):
+        route = classify_chat_request("MRI 表现？", has_confirmed_case=False)
+
+        self.assertFalse(route.use_case_context)
+        self.assertEqual(route.mode, "general_medical")
+
     def test_confirmed_patient_medical_followup_keeps_case_context(self):
         route = classify_chat_request("手术怎么选？", has_confirmed_case=True)
 

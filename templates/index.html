@@ -35,8 +35,8 @@
         </div>
         <div class="nav-section">
           <div class="nav-section-title">研究工具</div>
-          <button class="nav-item" data-prompt="请结合当前病例的影像资料（CT / MRI / 超声 / 病理），列出建议重点关注和进行 ROI 标注的区域，并说明标注依据：">ROI 标注辅助</button>
-          <button class="nav-item" data-prompt="请结合临床、影像与病理特征进行多模态相似病例检索，并整理治疗与随访对照：">多模态病例匹配</button>
+          <button class="nav-item" data-prompt="请结合当前病例的影像描述（CT / MRI / 超声 / 病理报告文字），以文字形式给出建议重点关注的 ROI 标注区域与依据（当前版本暂不支持在图像上直接绘制 ROI）：">ROI 标注建议（文字）</button>
+          <button class="nav-item" data-prompt="请结合当前病例的临床、影像与病理信息进行多模态讨论辅助分析，并检索可参考的相似病例与文献（实验功能，暂无图像向量检索）：">多模态讨论辅助（实验）</button>
         </div>
       </nav>
 
@@ -60,9 +60,10 @@
           <p id="topbarCaseLabel">未选择病例</p>
         </div>
         <div class="topbar-chips">
-          <span class="chip" id="chipMode" title="病例数据保存在本机；仅提问与脱敏后的上下文会发送给所配置的模型">本机模式</span>
-          <span class="chip chip-model" id="chipModel">本地知识库</span>
+          <span class="chip" id="chipStorage" title="病例、文献与上传附件都保存在本机数据目录，不写入任何云端服务">数据仅存本机</span>
+          <span class="chip" id="chipModel">本地知识库</span>
           <span class="chip chip-success" title="发送给第三方模型前，自动去除姓名、病案号、电话、邮箱等身份标识">文本脱敏已开启</span>
+          <span class="chip" id="chipImagePolicy" title="图片是否发送给第三方模型">图片仅本机处理</span>
         </div>
       </header>
 
@@ -97,13 +98,13 @@
                   <b>上传医学影像</b>
                   <small>CT · MRI · 超声 · 病理，纳入当前讨论</small>
                 </button>
-                <button type="button" class="task-card" data-prompt="请结合当前病例的影像资料（CT / MRI / 超声 / 病理），列出建议重点关注和进行 ROI 标注的区域，并说明标注依据：">
-                  <b>ROI 标注辅助</b>
-                  <small>矩形 · 多边形 · Mask 的重点区域建议</small>
+                <button type="button" class="task-card" data-prompt="请结合当前病例的影像描述（CT / MRI / 超声 / 病理报告文字），以文字形式给出建议重点关注的 ROI 标注区域与依据（当前版本暂不支持在图像上直接绘制 ROI）：">
+                  <b>ROI 标注建议（文字）</b>
+                  <small>基于病例文本给出重点关注区域与依据；图像直接标注待下阶段</small>
                 </button>
-                <button type="button" class="task-card" data-prompt="请结合临床、影像与病理特征进行多模态相似病例检索，并整理治疗与随访对照：">
-                  <b>多模态病例匹配</b>
-                  <small>临床 + 影像 + 病理联合检索</small>
+                <button type="button" class="task-card" data-prompt="请结合当前病例的临床、影像与病理信息进行多模态讨论辅助分析，并检索可参考的相似病例与文献（实验功能，暂无图像向量检索）：">
+                  <b>多模态讨论辅助（实验）</b>
+                  <small>临床 + 影像 + 病理联合讨论；图像向量匹配待下阶段</small>
                 </button>
               </div>
             </div>
@@ -140,6 +141,21 @@
       </footer>
     </section>
   </main>
+
+  <div class="modal-backdrop" id="caseChoiceModal" hidden>
+    <div class="modal-card compact-modal">
+      <div class="modal-head">
+        <h3 id="caseChoiceTitle">检测到新的病例信息</h3>
+        <button id="closeCaseChoice" aria-label="关闭">×</button>
+      </div>
+      <p class="modal-tip" id="caseChoiceTip">当前对话已有病例。新内容是同一位患者的补充资料，还是另一位患者？</p>
+      <div class="modal-actions">
+        <button id="choiceMergeCase">补充当前病例</button>
+        <button id="choiceNewCase" class="ghost">作为新病例讨论</button>
+      </div>
+      <div class="modal-status">不同患者的资料请选择“作为新病例讨论”，避免不同患者信息被合并到同一病例。</div>
+    </div>
+  </div>
 
   <div class="modal-backdrop" id="apiModal" hidden>
     <div class="modal-card">

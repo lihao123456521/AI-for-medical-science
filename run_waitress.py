@@ -7,5 +7,5 @@ from app import app
 if __name__ == "__main__":
     host = os.getenv("HOST", "127.0.0.1")
     port = int(os.getenv("PORT", "5000"))
-    print(f"UroSCC-LS Risk AI is running at http://127.0.0.1:{port}")
+    print(f"UroPUC is running at http://127.0.0.1:{port}")
     serve(app, host=host, port=port, threads=8)

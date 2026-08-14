@@ -3,7 +3,7 @@ param(
     [string]$InstallDir = "D:\uscc_scc_flask_fixed",
     [string]$RuntimeDir = (Join-Path $env:USERPROFILE ".uscc_scc_flask_data"),
     [string]$BackupRoot = (Join-Path $env:USERPROFILE "AI-medical-backups"),
-    [string]$DesktopShortcut = (Join-Path ([Environment]::GetFolderPath("Desktop")) "AI罕见病助手.lnk"),
+    [string]$DesktopShortcut = (Join-Path ([Environment]::GetFolderPath("Desktop")) "UroPUC.lnk"),
     [switch]$SkipProcessStop,
     [switch]$SkipShortcut
 )

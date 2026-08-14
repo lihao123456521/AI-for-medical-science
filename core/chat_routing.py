@@ -26,9 +26,9 @@ CASE_REFERENCE_TERMS = (
     "她的病",
 )
 
-DECISION_TERMS = (
-    "怎么", "如何", "为什么", "选", "推荐", "建议", "怎么办", "要不要", "是否",
-    "适合", "能否", "能不能", "需要", "下一步", "预后", "严重", "风险", "哪种", "该不该",
+# 定义/科普类问题即使已确认病例也走通用医学回答，避免把患者上下文强加给概念解释
+DEFINITION_TERMS = (
+    "什么是", "是什么意思", "是什么", "是指", "定义", "解释一下", "科普", "介绍一下",
 )
 
 CASE_DETAIL_KEYS = (
@@ -99,13 +99,16 @@ def classify_chat_request(
     if explicit_retrieval and has_confirmed_case:
         return ChatRoute(True, True, "explicit_retrieval", True)
 
+    is_medical = any(term.lower() in q.lower() for term in MEDICAL_TERMS)
+    is_definition = any(term in q for term in DEFINITION_TERMS)
     case_reference = any(term in q for term in CASE_REFERENCE_TERMS)
-    if case_reference and has_confirmed_case:
+
+    # 已确认病例后，医学问题（含“TNM 呢？”这类短追问）默认携带病例上下文；
+    # 检索行为仍由显式检索词单独触发，概念定义类问题走通用医学回答。
+    if has_confirmed_case and (case_reference or (is_medical and not is_definition)):
         return ChatRoute(True, False, "case_followup", True)
 
-    if any(term.lower() in q.lower() for term in MEDICAL_TERMS):
-        if has_confirmed_case and any(term in q for term in DECISION_TERMS):
-            return ChatRoute(True, False, "case_followup", True)
+    if is_medical:
         return ChatRoute(False, False, "general_medical", True)
 
     return ChatRoute(False, False, "general", False)

@@ -31,7 +31,7 @@ from core.seed_data import initialize_runtime_from_seed
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
-APP_BUILD_ID = "2026.06.13-v39"
+APP_BUILD_ID = "2026.08.15-v40"
 DATA_PATH = Path(os.getenv("DATA_PATH", "data/knowledge_base.xlsx"))
 if not DATA_PATH.is_absolute():
     DATA_PATH = BASE_DIR / DATA_PATH
@@ -93,10 +93,17 @@ AUTH_TOKEN = os.getenv("AUTH_TOKEN", "").strip()
 
 @app.before_request
 def _require_auth_for_api():
-    """可选访问令牌：设置 AUTH_TOKEN 环境变量后，/api/* 请求需携带 X-Auth-Token 头。"""
+    """可选访问令牌：设置 AUTH_TOKEN 后，远程 /api/* 请求需携带 X-Auth-Token 头。
+
+    本机桌面模式（回环地址访问）不启用该机制，避免前端在本地场景下出现 401；
+    远程部署仍受令牌保护，前端收到 401 时会提示输入令牌并重试。
+    """
     if not AUTH_TOKEN:
         return None
     if request.path.startswith("/api/"):
+        remote = (request.remote_addr or "").strip()
+        if remote in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
+            return None
         if request.headers.get("X-Auth-Token", "") != AUTH_TOKEN:
             return jsonify({"ok": False, "error": "未授权：缺少或错误的访问令牌（X-Auth-Token）。"}), 401
     return None
@@ -1773,6 +1780,10 @@ def api_storage_status():
         "persistent_data_dir": str(PERSISTENT_DATA_DIR),
         "uploads_dir": str(UPLOAD_DIR),
         "upload_files": len([p for p in UPLOAD_DIR.iterdir() if p.is_file()]),
+        "upload_images": len([
+            p for p in UPLOAD_DIR.iterdir()
+            if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
+        ]),
         "user_cases_saved": USER_CASES_PATH.exists(),
         "articles_saved": ARTICLES_PATH.exists(),
         "user_cases": len([r for r in kb.records if _is_user_case(r)]),
@@ -2495,6 +2506,11 @@ def api_export():
                 zf.write(path, arcname=name)
         if DATA_PATH.exists():
             zf.write(DATA_PATH, arcname=DATA_PATH.name)
+        # 完整备份必须包含上传附件（影像、PDF 等），否则病例会丢失影像资料
+        if UPLOAD_DIR.exists():
+            for item in sorted(UPLOAD_DIR.iterdir()):
+                if item.is_file():
+                    zf.write(item, arcname=f"uploads/{item.name}")
     buf.seek(0)
     return Response(
         buf.getvalue(),

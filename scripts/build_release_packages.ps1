@@ -1,5 +1,5 @@
-param(
-    [string]$Version = "2026.06.12-v38"
+﻿param(
+    [string]$Version = "2026.08.15-v40"
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,7 +8,7 @@ $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $DistDir = Join-Path $ProjectRoot "dist"
 $BuildRoot = Join-Path $ProjectRoot ".package-build"
 $PackageRootName = "AI-for-medical-science"
-$WindowsLauncherExe = Join-Path $DistDir "AI-rare-disease-assistant.exe"
+$WindowsLauncherExe = Join-Path $DistDir "UroPUC.exe"
 
 if (Test-Path $BuildRoot) {
     Remove-Item -Recurse -Force $BuildRoot
@@ -26,8 +26,9 @@ function Build-WindowsExeLauncher {
         "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
     ) | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $csc) {
-        Write-Warning "csc.exe was not found; Windows exe launcher was not built."
-        return $null
+        # UroPUC.exe 是 Windows 发布包的必备交付物：csc 缺失必须直接失败，
+        # 不允许生成没有 EXE 的 ZIP 继续发布。
+        throw "csc.exe was not found; the Windows release requires UroPUC.exe to be built."
     }
 
     $source = Join-Path $PSScriptRoot "windows_exe_launcher.cs"
@@ -46,6 +47,9 @@ function Build-WindowsExeLauncher {
     & $csc @args
     if ($LASTEXITCODE -ne 0) {
         throw "csc.exe failed with exit code $LASTEXITCODE"
+    }
+    if (-not (Test-Path $WindowsLauncherExe)) {
+        throw "UroPUC.exe was not produced by csc.exe."
     }
     return $WindowsLauncherExe
 }
@@ -75,7 +79,7 @@ function Copy-PackageTree {
     Copy-Item -Path (Join-Path $publicSeedSource "*.json") -Destination $publicSeedTarget -Force
 
     $marker = Join-Path $packageRoot "PACKAGE_VERSION.txt"
-    Set-Content -Path $marker -Value "AI for Medical Science $Version $Platform package" -Encoding UTF8
+    Set-Content -Path $marker -Value "UroPUC $Version $Platform package" -Encoding UTF8
     return $packageRoot
 }
 
@@ -85,13 +89,16 @@ $windowsRoot = Copy-PackageTree -Platform "windows"
 $macRoot = Copy-PackageTree -Platform "macos"
 $linuxRoot = Copy-PackageTree -Platform "linux"
 
-if ($builtWindowsLauncher -and (Test-Path $builtWindowsLauncher)) {
-    Copy-Item -Path $builtWindowsLauncher -Destination (Join-Path $windowsRoot "AI-rare-disease-assistant.exe") -Force
+Copy-Item -Path $builtWindowsLauncher -Destination (Join-Path $windowsRoot "UroPUC.exe") -Force
+
+# 硬门槛：Windows ZIP 根目录必须存在 UroPUC.exe，否则立即失败。
+if (-not (Test-Path (Join-Path $windowsRoot "UroPUC.exe"))) {
+    throw "Windows package root is missing UroPUC.exe; refusing to build the release ZIP."
 }
 
-$windowsZip = Join-Path $DistDir "AI-for-medical-science-windows.zip"
-$macTar = Join-Path $DistDir "AI-for-medical-science-macos.tar.gz"
-$linuxTar = Join-Path $DistDir "AI-for-medical-science-linux.tar.gz"
+$windowsZip = Join-Path $DistDir "UroPUC-windows.zip"
+$macTar = Join-Path $DistDir "UroPUC-macos.tar.gz"
+$linuxTar = Join-Path $DistDir "UroPUC-linux.tar.gz"
 
 Remove-Item -Path @($windowsZip, $macTar, $linuxTar) -Force -ErrorAction SilentlyContinue
 
@@ -99,10 +106,20 @@ Compress-Archive -Path $windowsRoot -DestinationPath $windowsZip -Force
 tar -czf $macTar -C (Split-Path $macRoot -Parent) $PackageRootName
 tar -czf $linuxTar -C (Split-Path $linuxRoot -Parent) $PackageRootName
 
+# ZIP 内容校验：确认压缩包内确实包含 UroPUC.exe。
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zipCheck = [IO.Compression.ZipFile]::OpenRead($windowsZip)
+try {
+    $zipNames = @($zipCheck.Entries | ForEach-Object { $_.FullName.Replace("\", "/") })
+    if (($zipNames -notcontains "$PackageRootName/UroPUC.exe")) {
+        throw "UroPUC.exe was not found inside $windowsZip."
+    }
+} finally {
+    $zipCheck.Dispose()
+}
+
 Write-Host "Created:"
 Write-Host " - $windowsZip"
 Write-Host " - $macTar"
 Write-Host " - $linuxTar"
-if (Test-Path $WindowsLauncherExe) {
-    Write-Host " - $WindowsLauncherExe"
-}
+Write-Host " - $WindowsLauncherExe"

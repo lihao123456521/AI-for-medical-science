@@ -157,6 +157,12 @@ The Windows launcher verifies the running service build before opening it, so an
 - Public demonstrations should use synthetic or fully de-identified cases only.
 - Every output should be reviewed by qualified medical professionals before any real-world interpretation.
 
+### Optional access control and data export
+
+- **Access token**: set the `AUTH_TOKEN` environment variable to require an `X-Auth-Token` header on every `/api/*` request. Leave it empty for the default local no-login experience.
+- **Data backup**: the knowledge-base page includes an "导出数据备份" button that downloads all local cases and articles as a ZIP (`/api/export`).
+- **Upload limits**: `MAX_IMAGE_MB` caps single image size (default 20 MB); `PDF_MAX_PAGES` limits how many PDF pages are parsed per file (default 60).
+
 ## Deployment
 
 For a cloud demo, use the included `render.yaml` or deploy the Flask app behind Gunicorn/Nginx on a controlled server. Before public deployment, add authentication, audit logging, data retention controls, and a complete privacy review.

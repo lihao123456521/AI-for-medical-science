@@ -11,6 +11,7 @@ import re
 import hashlib
 import zipfile
 import secrets
+import io
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -85,6 +86,20 @@ MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "500"))
 MAX_TEXT_CHARS_PER_FILE = int(os.getenv("MAX_TEXT_CHARS_PER_FILE", "500000"))
 
 kb = KnowledgeBase(DATA_PATH)
+
+MAX_IMAGE_MB = int(os.getenv("MAX_IMAGE_MB", "20"))
+AUTH_TOKEN = os.getenv("AUTH_TOKEN", "").strip()
+
+
+@app.before_request
+def _require_auth_for_api():
+    """可选访问令牌：设置 AUTH_TOKEN 环境变量后，/api/* 请求需携带 X-Auth-Token 头。"""
+    if not AUTH_TOKEN:
+        return None
+    if request.path.startswith("/api/"):
+        if request.headers.get("X-Auth-Token", "") != AUTH_TOKEN:
+            return jsonify({"ok": False, "error": "未授权：缺少或错误的访问令牌（X-Auth-Token）。"}), 401
+    return None
 
 
 def _record_to_saved_dict(rec: CaseRecord) -> Dict[str, Any]:
@@ -2388,6 +2403,10 @@ def api_upload():
     dest = UPLOAD_DIR / stored_name
     file.save(dest)
 
+    if suffix in IMAGE_EXTENSIONS and dest.stat().st_size > MAX_IMAGE_MB * 1024 * 1024:
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": f"图片过大：单张图片不能超过 {MAX_IMAGE_MB}MB。"}), 413
+
     response = {
         "ok": True,
         "filename": original_name,
@@ -2453,6 +2472,30 @@ def api_candidate_add():
         return jsonify({"ok": True, "duplicate": True, "case": _case_to_public_dict(duplicate), "message": f"检测到相同或高度相似病例：{duplicate.case_id}，已跳过重复保存。"})
     rec = _add_case_from_fields(candidate, source_text=source_text)
     return jsonify({"ok": True, "case": _case_to_public_dict(rec), "message": f"已将候选病例加入知识库：{rec.case_id}"})
+
+
+@app.get("/api/export")
+def api_export():
+    export_files = [
+        ("user_cases.json", USER_CASES_PATH),
+        ("articles.json", ARTICLES_PATH),
+        ("case_tags.json", CASE_TAGS_PATH),
+        ("deleted_cases.json", DELETED_CASES_PATH),
+        ("migration_state.json", MIGRATION_STATE_PATH),
+    ]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, path in export_files:
+            if path.exists():
+                zf.write(path, arcname=name)
+        if DATA_PATH.exists():
+            zf.write(DATA_PATH, arcname=DATA_PATH.name)
+    buf.seek(0)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": "attachment; filename=uropuc_data_export.zip"},
+    )
 
 
 @app.get("/healthz")

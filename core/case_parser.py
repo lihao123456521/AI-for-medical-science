@@ -3,11 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 import math
+import os
 import re
 
 import pandas as pd
 
 from core.case_document import extract_pdf_case_segments, segment_numbered_cases
+
+PDF_MAX_PAGES = int(os.getenv("PDF_MAX_PAGES", "60"))
 
 FIELD_ALIASES: Dict[str, List[str]] = {
     "sex": ["性别", "sex", "gender", "患者性别"],
@@ -268,7 +271,7 @@ def parse_pdf(path: Path) -> Tuple[Dict[str, str], List[str]]:
             raise RuntimeError("PDF 病例解析需要安装 pypdf：pip install pypdf") from exc
     reader = PdfReader(str(path))
     parts: List[str] = []
-    for page in reader.pages[:60]:
+    for page in reader.pages[:PDF_MAX_PAGES]:
         try:
             txt = page.extract_text() or ""
         except Exception:

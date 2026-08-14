@@ -10,6 +10,7 @@ import math
 import re
 import hashlib
 import zipfile
+import secrets
 from datetime import datetime
 from typing import Any, Dict, List
 
@@ -73,7 +74,7 @@ def _build_chat_report(route, question: str, patient: Dict[str, Any], attachment
     )
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "dev-only-secret")
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "512")) * 1024 * 1024
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".dcm"}
@@ -1598,7 +1599,10 @@ def add_no_cache_headers(response):
 @app.errorhandler(Exception)
 def handle_exception(exc):
     if request.path.startswith("/api/"):
-        return jsonify({"ok": False, "error": str(exc), "traceback": traceback.format_exc(limit=2)}), 500
+        payload = {"ok": False, "error": str(exc)}
+        if os.getenv("FLASK_DEBUG", "0") == "1":
+            payload["traceback"] = traceback.format_exc(limit=2)
+        return jsonify(payload), 500
     raise exc
 
 
@@ -2426,9 +2430,6 @@ def api_upload():
             "type": "image",
             "note": f"{img_kind}已保存。若配置了多模态 API，后续问答会把该图片作为当前对话附件传入模型。",
         })
-    elif suffix == ".pdf":
-        response.update({"type": "pdf", "note": "PDF 已保存。建议同时粘贴关键报告文字以提高检索准确性。"})
-
     return jsonify(response)
 
 
@@ -2456,10 +2457,10 @@ def api_candidate_add():
 
 @app.get("/healthz")
 def healthz():
-    return jsonify({"status": "ok", "build_id": APP_BUILD_ID, "records": len(kb.records), "data_path": str(DATA_PATH)})
+    return jsonify({"status": "ok", "build_id": APP_BUILD_ID, "records": len(kb.records)})
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host="127.0.0.1", port=port, debug=debug)

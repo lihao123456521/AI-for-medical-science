@@ -119,10 +119,15 @@ The Windows launcher verifies the running service build before opening it, so an
 .
 |-- app.py
 |-- core/
+|   |-- api_config_store.py
+|   |-- case_document.py
 |   |-- case_parser.py
+|   |-- chat_routing.py
 |   |-- data_loader.py
+|   |-- evidence_context.py
 |   |-- llm_client.py
-|   `-- risk_engine.py
+|   |-- risk_engine.py
+|   `-- seed_data.py
 |-- data/
 |   |-- seed/
 |   |   |-- user_cases.json
@@ -131,12 +136,16 @@ The Windows launcher verifies the running service build before opening it, so an
 |   |-- knowledge_base.xlsx
 |   `-- knowledge_base_manifest.json
 |-- static/
+|   |-- assets/
+|   |-- css/
+|   `-- js/
 |-- templates/
+|-- tests/
 |-- scripts/
 |-- docs/
 |   |-- media/
 |   `-- notes/
-`-- dist/
+`-- .github/workflows/
 ```
 
 ## Security And Data Notes

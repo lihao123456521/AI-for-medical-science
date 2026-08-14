@@ -10,6 +10,7 @@ const els = {
   sidebar: document.getElementById('sidebar'),
   historyList: document.getElementById('historyList'),
   chatWindow: document.getElementById('chatWindow'),
+  chatThread: document.getElementById('chatThread'),
   emptyState: document.getElementById('emptyState'),
   input: document.getElementById('messageInput'),
   sendBtn: document.getElementById('sendBtn'),
@@ -19,6 +20,15 @@ const els = {
   uploadStatus: document.getElementById('uploadStatus'),
   kbSummary: document.getElementById('kbSummary'),
   mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+  topbarCaseLabel: document.getElementById('topbarCaseLabel'),
+  chipModel: document.getElementById('chipModel'),
+  ctxCase: document.getElementById('ctxCase'),
+  ctxAttachments: document.getElementById('ctxAttachments'),
+  statCases: document.getElementById('statCases'),
+  statArticles: document.getElementById('statArticles'),
+  statImages: document.getElementById('statImages'),
+  statUserCases: document.getElementById('statUserCases'),
+  taskUploadImaging: document.getElementById('taskUploadImaging'),
   apiKeyBtn: document.getElementById('apiKeyBtn'),
   apiModal: document.getElementById('apiModal'),
   closeApiModal: document.getElementById('closeApiModal'),
@@ -201,15 +211,36 @@ function renderHistory() {
 }
 function renderChat() {
   const chat = currentChat();
-  els.chatWindow.innerHTML = '';
+  els.chatThread.innerHTML = '';
   if (!chat.messages.length) {
-    els.chatWindow.appendChild(els.emptyState);
-    els.emptyState.style.display = 'block';
+    els.emptyState.style.display = '';
+    els.chatThread.style.display = 'none';
+    updateWorkspaceContext();
     return;
   }
   els.emptyState.style.display = 'none';
+  els.chatThread.style.display = '';
   for (const msg of chat.messages) renderMessage(msg);
   scrollToBottom();
+  updateWorkspaceContext();
+}
+function updateWorkspaceContext() {
+  const chat = currentChat();
+  const hasCase = Boolean(chat.caseConfirmed) || Object.keys(chat.patient || {}).length > 0;
+  const caseLabel = hasCase ? (chat.title || '当前病例') : '未选择';
+  if (els.topbarCaseLabel) els.topbarCaseLabel.textContent = hasCase ? `当前病例：${caseLabel}` : '未选择病例';
+  if (els.ctxCase) els.ctxCase.textContent = `当前病例：${caseLabel}`;
+  const count = (chat.attachments || []).length;
+  if (els.ctxAttachments) {
+    els.ctxAttachments.hidden = !count;
+    els.ctxAttachments.textContent = `${count} 个附件`;
+  }
+}
+function updateModelChip() {
+  if (!els.chipModel) return;
+  const cfg = rememberedApiConfig || (rememberedApiHistory || [])[0];
+  els.chipModel.textContent = cfg?.model ? cfg.model : (cfg?.provider ? `${cfg.provider} / 未选模型` : '本地知识库');
+  els.chipModel.title = cfg?.provider ? `当前模型：${cfg.provider} / ${cfg.model || '未选模型'}` : '未配置 API Key 时使用本地知识库兜底回答';
 }
 function renderMessage(msg) {
   const row = document.createElement('div');
@@ -224,7 +255,7 @@ function renderMessage(msg) {
   if (msg.report?.display_evidence_cards !== false && msg.report?.similar_cases?.length) bubble.appendChild(renderCaseLinks(msg.report.similar_cases));
   if (msg.candidates?.length) bubble.appendChild(renderCandidateLinks(msg.candidates));
   if (msg.report?.display_evidence_cards !== false && msg.report?.related_articles?.length) bubble.appendChild(renderArticleLinks(msg.report.related_articles));
-  row.appendChild(bubble); els.chatWindow.appendChild(row);
+  row.appendChild(bubble); els.chatThread.appendChild(row);
 }
 function renderAttachments(files) {
   const wrap = document.createElement('div'); wrap.className = 'attachment-list';
@@ -529,7 +560,14 @@ async function loadSummary() {
     const res = await fetch('/api/summary'); const data = await res.json();
     const groups = Object.entries(data.sheets || {}).map(([k,v]) => `${k} ${v}`).join('｜');
     els.kbSummary.innerHTML = `病例总数：${escapeHtml(data.total_cases)}｜文章 ${escapeHtml(data.articles || 0)}<br>${escapeHtml(groups || '暂无分组')}`;
+    if (els.statCases) els.statCases.textContent = data.total_cases ?? '—';
+    if (els.statArticles) els.statArticles.textContent = data.articles ?? '—';
   } catch (_) { els.kbSummary.textContent = '知识库读取失败'; }
+  try {
+    const res = await fetch('/api/storage/status', {cache:'no-store'}); const data = await res.json();
+    if (els.statImages) els.statImages.textContent = data.upload_files ?? '—';
+    if (els.statUserCases) els.statUserCases.textContent = data.user_cases ?? '—';
+  } catch (_) {}
 }
 
 const API_PROVIDER_CONFIG = {
@@ -610,12 +648,14 @@ async function fetchRememberedApiConfig() {
       }
       const hint = rememberedApiConfig?.provider ? `已记住：${rememberedApiConfig.provider} / ${rememberedApiConfig.model || '未选模型'}${rememberedApiConfig.api_key_masked ? ' / ' + rememberedApiConfig.api_key_masked : ''}` : '当前后端未记住 API 配置。';
       if (els.savedApiConfigHint) els.savedApiConfigHint.textContent = hint;
+      updateModelChip();
       return rememberedApiConfig;
     }
   } catch (_) {}
   if (els.savedApiConfigHint) els.savedApiConfigHint.textContent = '当前后端未记住 API 配置。';
   rememberedApiConfig = null;
   rememberedApiHistory = [];
+  updateModelChip();
   return null;
 }
 
@@ -883,6 +923,7 @@ els.newChatBtn.addEventListener('click', () => {
   els.input.focus();
 });
 els.addCurrentCaseBtn.addEventListener('click', addCurrentCase);
+els.taskUploadImaging?.addEventListener('click', () => els.fileInput.click());
 els.fileInput.addEventListener('change', e => { const file = e.target.files?.[0]; if (file) uploadFile(file); });
 els.mobileMenuBtn.addEventListener('click', () => els.sidebar.classList.toggle('open'));
 els.apiKeyBtn.addEventListener('click', () => { openApiModal(); });

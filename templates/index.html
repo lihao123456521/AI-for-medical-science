@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="{{ url_for('favicon') }}" />
   <link rel="shortcut icon" href="{{ url_for('favicon') }}" />
-  <title>USCC 病例问答</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui34" />
+  <title>UroPUC · 尿道肿瘤科研工作台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui35" />
 </head>
 <body>
   <main class="app-shell">
@@ -15,60 +15,147 @@
         <div class="logo-mark">US</div>
         <div>
           <h1>UroPUC</h1>
-          <p>病例问答 · 知识库检索</p>
+          <p>尿道肿瘤科研工作台</p>
         </div>
       </div>
 
-      <button class="api-key-btn" id="apiKeyBtn">⚙ API Key 配置</button>
-      <button class="api-key-btn secondary" id="fontSettingsBtn">字体设置</button>
-      <button class="new-chat-btn" id="newChatBtn">+ 新建对话</button>
-      <button class="new-chat-btn secondary" id="addCurrentCaseBtn">+ 添加当前病例</button>
-      <a class="kb-entry" href="/knowledge">
-        <b>病例知识库</b>
-        <span id="kbSummary">正在读取...</span>
-      </a>
+      <nav class="side-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">工作台</div>
+          <button class="nav-item nav-item-primary" id="newChatBtn">＋ 新建病例讨论</button>
+          <button class="nav-item" id="addCurrentCaseBtn">添加当前病例入库</button>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">数据</div>
+          <a class="nav-item nav-item-col" href="/knowledge">
+            <span>病例知识库</span>
+            <small id="kbSummary">正在读取...</small>
+          </a>
+          <a class="nav-item" href="/articles">文献知识库</a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">研究工具</div>
+          <button class="nav-item" data-prompt="请结合当前病例的影像描述（CT / MRI / 超声 / 病理报告文字），以文字形式给出建议重点关注的 ROI 标注区域与依据（当前版本暂不支持在图像上直接绘制 ROI）：">ROI 标注建议（文字）</button>
+          <button class="nav-item" data-prompt="请结合当前病例的临床、影像与病理信息进行多模态讨论辅助分析，并检索可参考的相似病例与文献（实验功能，暂无图像向量检索）：">多模态讨论辅助（实验）</button>
+        </div>
+      </nav>
 
       <section class="history-panel">
         <div class="panel-title">聊天记录</div>
         <div id="historyList" class="history-list"></div>
       </section>
+
+      <div class="side-footer">
+        <div class="nav-section-title">设置</div>
+        <button class="nav-item" id="apiKeyBtn">模型与 API Key</button>
+        <button class="nav-item" id="fontSettingsBtn">字体设置</button>
+      </div>
     </aside>
 
     <section class="chat-layout">
       <header class="topbar">
-        <button class="mobile-menu" id="mobileMenuBtn">☰</button>
-        <div class="topbar-mascot" aria-hidden="true">
-          <img class="mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="项目头像" />
+        <button class="mobile-menu" id="mobileMenuBtn" aria-label="打开侧边菜单">☰</button>
+        <div class="topbar-title">
+          <h2>AI 病例讨论</h2>
+          <p id="topbarCaseLabel">未选择病例</p>
         </div>
-        <div>
-          <h2 style="font-family: SimHei, 'Microsoft YaHei', sans-serif; font-weight: 900;">UroPUC</h2>
+        <div class="topbar-chips">
+          <span class="chip" id="chipStorage" title="病例、文献与上传附件都保存在本机数据目录，不写入任何云端服务">数据仅存本机</span>
+          <span class="chip" id="chipModel">本地知识库</span>
+          <span class="chip chip-success" title="发送给第三方模型前，自动去除姓名、病案号、电话、邮箱等身份标识">文本脱敏已开启</span>
+          <span class="chip" id="chipImagePolicy" title="图片是否发送给第三方模型">图片仅本机处理</span>
         </div>
       </header>
 
       <div class="chat-window" id="chatWindow">
-        <div class="empty-state" id="emptyState">
-          <div class="empty-mascot"><img class="mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="项目头像" /></div>
-          <h3>开始病例讨论</h3>
-          <p>粘贴病例摘要、检查结果或上传文件。需要保存时输入“投喂进入数据库”。</p>
-          <div class="quick-prompts">
-            <button data-prompt="请检索有借鉴价值的相似病例，并整理治疗与随访对照：">相似病例</button>
-            <button data-prompt="请根据当前病例整理病例讨论摘要：">病例摘要</button>
-            <button data-prompt="请比较相似病例的手术和用药路径：">治疗对照</button>
+        <div class="dashboard" id="emptyState">
+          <div class="main-inner">
+            <div class="dash-head">
+              <div>
+                <h3>多模态男性尿道肿瘤科研工作台</h3>
+                <p>病例、影像、病理、文献与 AI 讨论在同一工作流中组织。</p>
+              </div>
+              <div class="empty-mascot" aria-hidden="true">
+                <img class="mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="项目头像" />
+              </div>
+            </div>
+
+            <div class="dash-stats">
+              <a class="stat-card" href="/knowledge"><b id="statCases">—</b><span>病例</span></a>
+              <a class="stat-card" href="/articles"><b id="statArticles">—</b><span>文献</span></a>
+              <a class="stat-card stat-imaging" href="/knowledge"><b id="statImages">—</b><span>影像附件</span></a>
+              <a class="stat-card" href="/knowledge"><b id="statUserCases">—</b><span>我的病例</span></a>
+            </div>
+
+            <div class="dash-section">
+              <div class="dash-section-title">常用任务</div>
+              <div class="task-grid">
+                <a class="task-card" href="/add-case">
+                  <b>＋ 新建 / 导入病例</b>
+                  <small>文本 · Excel · PDF · 影像文件</small>
+                </a>
+                <button type="button" class="task-card task-imaging" id="taskUploadImaging">
+                  <b>上传医学影像</b>
+                  <small>CT · MRI · 超声 · 病理，纳入当前讨论</small>
+                </button>
+                <button type="button" class="task-card" data-prompt="请结合当前病例的影像描述（CT / MRI / 超声 / 病理报告文字），以文字形式给出建议重点关注的 ROI 标注区域与依据（当前版本暂不支持在图像上直接绘制 ROI）：">
+                  <b>ROI 标注建议（文字）</b>
+                  <small>基于病例文本给出重点关注区域与依据；图像直接标注待下阶段</small>
+                </button>
+                <button type="button" class="task-card" data-prompt="请结合当前病例的临床、影像与病理信息进行多模态讨论辅助分析，并检索可参考的相似病例与文献（实验功能，暂无图像向量检索）：">
+                  <b>多模态讨论辅助（实验）</b>
+                  <small>临床 + 影像 + 病理联合讨论；图像向量匹配待下阶段</small>
+                </button>
+              </div>
+            </div>
+
+            <div class="dash-section dash-ai">
+              <div class="dash-section-title">快速开始 AI 病例讨论</div>
+              <p>粘贴病例摘要、检查结果或上传文件。需要保存时输入“投喂进入数据库”。</p>
+              <div class="quick-prompts">
+                <button data-prompt="请检索有借鉴价值的相似病例，并整理治疗与随访对照：">相似病例</button>
+                <button data-prompt="请根据当前病例整理病例讨论摘要：">病例摘要</button>
+                <button data-prompt="请比较相似病例的手术和用药路径：">治疗对照</button>
+              </div>
+            </div>
           </div>
         </div>
+        <div class="chat-thread" id="chatThread"></div>
       </div>
 
       <footer class="composer-wrap">
-        <div id="uploadStatus" class="upload-status-inline"></div>
-        <div class="composer">
-          <label class="attach-btn" for="fileInput" title="上传病例文件、影像或病理图片">＋</label>
-          <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff,.dcm,.pdf,.xlsx,.xls,.csv,.docx,.txt,.md" hidden />
-          <textarea id="messageInput" rows="1" placeholder="输入病例、检查结果或医生问题"></textarea>
-          <button id="sendBtn" title="发送">发送</button>
+        <div class="composer-inner">
+          <div class="composer-context" id="composerContext">
+            <span class="ctx-chip" id="ctxCase">当前病例：未选择</span>
+            <span class="ctx-chip" id="ctxAttachments" hidden>0 个附件</span>
+            <span class="ctx-chip ctx-success" title="发送给第三方模型前，自动去除姓名、病案号、电话、邮箱等身份标识">脱敏已开启</span>
+          </div>
+          <div id="uploadStatus" class="upload-status-inline"></div>
+          <div class="composer">
+            <label class="attach-btn" for="fileInput" title="上传病例文件、影像或病理图片" aria-label="上传文件">＋</label>
+            <input id="fileInput" type="file" accept=".jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff,.dcm,.pdf,.xlsx,.xls,.csv,.docx,.txt,.md" hidden />
+            <textarea id="messageInput" rows="1" placeholder="输入病例、检查结果或医生问题"></textarea>
+            <button id="sendBtn" title="发送" aria-label="发送消息">发送 ➤</button>
+          </div>
         </div>
       </footer>
     </section>
   </main>
+
+  <div class="modal-backdrop" id="caseChoiceModal" hidden>
+    <div class="modal-card compact-modal">
+      <div class="modal-head">
+        <h3 id="caseChoiceTitle">检测到新的病例信息</h3>
+        <button id="closeCaseChoice" aria-label="关闭">×</button>
+      </div>
+      <p class="modal-tip" id="caseChoiceTip">当前对话已有病例。新内容是同一位患者的补充资料，还是另一位患者？</p>
+      <div class="modal-actions">
+        <button id="choiceMergeCase">补充当前病例</button>
+        <button id="choiceNewCase" class="ghost">作为新病例讨论</button>
+      </div>
+      <div class="modal-status">不同患者的资料请选择“作为新病例讨论”，避免不同患者信息被合并到同一病例。</div>
+    </div>
+  </div>
 
   <div class="modal-backdrop" id="apiModal" hidden>
     <div class="modal-card">
@@ -156,6 +243,6 @@
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=chatui34"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=chatui35"></script>
 </body>
 </html>

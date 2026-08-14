@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +23,7 @@ class DesktopDeployContractTests(unittest.TestCase):
         self.assertIn("$_.ProcessId -ne $PID", source)
         self.assertIn("$_.Name -in @(\"python.exe\", \"pythonw.exe\")", source)
 
+    @unittest.skipUnless(sys.platform.startswith("win"), "executes Windows PowerShell; run on Windows runners")
     def test_fixture_deploy_replaces_app_but_preserves_private_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -136,8 +136,7 @@
         } else {
           const fields = data.fields || {};
           fillParsedFields(fields);
-          const saved = await autoSaveParsedCase(fields, data.text || '');
-          caseFileStatus.innerHTML = `已解析并保存：<a href="/case/${encodeURIComponent(saved.case.case_id)}" target="_blank">${escapeHtml(saved.case.case_id)}</a>`;
+          caseFileStatus.innerHTML = '已解析，请核对下方表单（诊断、年龄、性别、病理、TNM、治疗等），确认无误后点击「保存手动输入病例」写入知识库。';
         }
       } catch (err) { caseFileStatus.textContent = `解析/保存失败：${err.message}`; }
       finally { document.getElementById('caseFile').value = ''; }

@@ -1,6 +1,6 @@
 # AI for Medical Science
 
-UroSCC-LS Risk AI is a Flask-based medical science prototype for case entry, local knowledge-base retrieval, risk-factor explanation, and assisted discussion around male urethral squamous cell carcinoma and lichen sclerosus related clinical evidence.
+UroPUC is a Flask-based medical science prototype for case entry, local knowledge-base retrieval, risk-factor explanation, and assisted discussion around male urethral squamous cell carcinoma and lichen sclerosus related clinical evidence.
 
 This project is intended for teaching, research discussion, and prototype demonstration. It is not a medical device and must not be used as a diagnosis, staging, treatment, or triage system.
 
@@ -8,9 +8,9 @@ This project is intended for teaching, research discussion, and prototype demons
 
 | Windows | macOS | Linux |
 | --- | --- | --- |
-| **[Download Windows ZIP](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-windows.zip)** | **[Download macOS TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-macos.tar.gz)** | **[Download Linux TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-linux.tar.gz)** |
+| **[Download UroPUC Windows ZIP](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-windows.zip)** | **[Download UroPUC macOS TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-macos.tar.gz)** | **[Download UroPUC Linux TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-linux.tar.gz)** |
 
-Windows users: extract the ZIP and double-click `AI-rare-disease-assistant.exe`. The launcher opens the chat UI automatically and creates a desktop shortcut with the themed doctor-patient app icon. `start_windows_local.bat` is kept as a fallback.
+Windows users: extract `UroPUC-windows.zip` and double-click `UroPUC.exe` in the extracted root folder. The launcher starts the local service and opens the app window automatically — no PowerShell needed. `start_windows_local.bat` is kept as a fallback.
 
 ## Promotional Video
 
@@ -24,13 +24,13 @@ If your browser blocks video playback, open the compressed demo here: [AI rare d
 
 ## Download Packages
 
-The packages are portable source-based installers. Users need Python 3.10 or newer; the package startup scripts create a virtual environment and install the required Python libraries.
+The packages are portable source-based installers — they are **not** fully self-contained apps. Python 3.10 or newer must be installed first; on first launch the package startup scripts create a virtual environment and may install the required Python libraries from the network.
 
 | System | Download | How to start |
 | --- | --- | --- |
-| Windows | [AI-for-medical-science-windows.zip](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-windows.zip) | Extract the zip, then double-click `AI-rare-disease-assistant.exe`; it opens an app-style window and creates a desktop shortcut automatically |
-| macOS | [AI-for-medical-science-macos.tar.gz](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
-| Linux | [AI-for-medical-science-linux.tar.gz](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/AI-for-medical-science-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
+| Windows | [UroPUC-windows.zip](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-windows.zip) | Extract the zip, then double-click `UroPUC.exe` in the extracted root folder; it opens an app-style window and creates a desktop shortcut automatically |
+| macOS | [UroPUC-macos.tar.gz](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-macos.tar.gz) | Extract, open Terminal in the folder, run `bash run_mac_linux.sh` |
+| Linux | [UroPUC-linux.tar.gz](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-linux.tar.gz) | Extract, open a terminal in the folder, run `bash run_mac_linux.sh` |
 
 After startup, open:
 
@@ -156,6 +156,12 @@ The Windows launcher verifies the running service build before opening it, so an
 - The bundled seed library removes identity fields, exact clinical dates, local file paths, uploaded image references, and API credentials. Original clinical images are not published.
 - Public demonstrations should use synthetic or fully de-identified cases only.
 - Every output should be reviewed by qualified medical professionals before any real-world interpretation.
+
+### Optional access control and data export
+
+- **Access token**: set the `AUTH_TOKEN` environment variable to require an `X-Auth-Token` header on every `/api/*` request. Leave it empty for the default local no-login experience.
+- **Data backup**: the knowledge-base page includes an "导出数据备份" button that downloads all local cases and articles as a ZIP (`/api/export`).
+- **Upload limits**: `MAX_IMAGE_MB` caps single image size (default 20 MB); `PDF_MAX_PAGES` limits how many PDF pages are parsed per file (default 60).
 
 ## Deployment
 

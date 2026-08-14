@@ -5,11 +5,40 @@ const API_PROVIDER_STORAGE = 'uscc_api_provider';
 const API_BASE_URL_STORAGE = 'uscc_api_base_url';
 const API_CUSTOM_MODEL_STORAGE = 'uscc_api_custom_model';
 const API_CONFIG_ID_STORAGE = 'uscc_api_config_id';
+const AUTH_TOKEN_STORAGE = 'UroPUC_auth_token';
+
+// 可选访问令牌闭环：远程部署设置 AUTH_TOKEN 后，前端在收到 401 时请求令牌并自动重试
+(function setupApiAuth() {
+  const origFetch = window.fetch.bind(window);
+  const apiPathOf = (input) => {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    return url.startsWith('/api/');
+  };
+  const withAuthHeader = (input, init) => {
+    const token = localStorage.getItem(AUTH_TOKEN_STORAGE) || '';
+    if (!token || !apiPathOf(input)) return init;
+    const headers = new Headers(init.headers || {});
+    if (!headers.has('X-Auth-Token')) headers.set('X-Auth-Token', token);
+    return { ...init, headers };
+  };
+  window.fetch = async function (input, init = {}) {
+    let res = await origFetch(input, withAuthHeader(input, init));
+    if (res.status === 401 && apiPathOf(input)) {
+      const token = window.prompt('该部署已启用访问令牌（AUTH_TOKEN）。请输入访问令牌：', localStorage.getItem(AUTH_TOKEN_STORAGE) || '');
+      if (token && token.trim()) {
+        localStorage.setItem(AUTH_TOKEN_STORAGE, token.trim());
+        res = await origFetch(input, withAuthHeader(input, init));
+      }
+    }
+    return res;
+  };
+})();
 
 const els = {
   sidebar: document.getElementById('sidebar'),
   historyList: document.getElementById('historyList'),
   chatWindow: document.getElementById('chatWindow'),
+  chatThread: document.getElementById('chatThread'),
   emptyState: document.getElementById('emptyState'),
   input: document.getElementById('messageInput'),
   sendBtn: document.getElementById('sendBtn'),
@@ -19,6 +48,22 @@ const els = {
   uploadStatus: document.getElementById('uploadStatus'),
   kbSummary: document.getElementById('kbSummary'),
   mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+  topbarCaseLabel: document.getElementById('topbarCaseLabel'),
+  chipModel: document.getElementById('chipModel'),
+  chipImagePolicy: document.getElementById('chipImagePolicy'),
+  caseChoiceModal: document.getElementById('caseChoiceModal'),
+  caseChoiceTitle: document.getElementById('caseChoiceTitle'),
+  caseChoiceTip: document.getElementById('caseChoiceTip'),
+  choiceMergeCase: document.getElementById('choiceMergeCase'),
+  choiceNewCase: document.getElementById('choiceNewCase'),
+  closeCaseChoice: document.getElementById('closeCaseChoice'),
+  ctxCase: document.getElementById('ctxCase'),
+  ctxAttachments: document.getElementById('ctxAttachments'),
+  statCases: document.getElementById('statCases'),
+  statArticles: document.getElementById('statArticles'),
+  statImages: document.getElementById('statImages'),
+  statUserCases: document.getElementById('statUserCases'),
+  taskUploadImaging: document.getElementById('taskUploadImaging'),
   apiKeyBtn: document.getElementById('apiKeyBtn'),
   apiModal: document.getElementById('apiModal'),
   closeApiModal: document.getElementById('closeApiModal'),
@@ -201,15 +246,49 @@ function renderHistory() {
 }
 function renderChat() {
   const chat = currentChat();
-  els.chatWindow.innerHTML = '';
+  els.chatThread.innerHTML = '';
   if (!chat.messages.length) {
-    els.chatWindow.appendChild(els.emptyState);
-    els.emptyState.style.display = 'block';
+    els.emptyState.style.display = '';
+    els.chatThread.style.display = 'none';
+    updateWorkspaceContext();
     return;
   }
   els.emptyState.style.display = 'none';
+  els.chatThread.style.display = '';
   for (const msg of chat.messages) renderMessage(msg);
   scrollToBottom();
+  updateWorkspaceContext();
+}
+function updateWorkspaceContext() {
+  const chat = currentChat();
+  const hasCase = Boolean(chat.caseConfirmed) || Object.keys(chat.patient || {}).length > 0;
+  const caseLabel = hasCase ? (chat.title || '当前病例') : '未选择';
+  if (els.topbarCaseLabel) els.topbarCaseLabel.textContent = hasCase ? `当前病例：${caseLabel}` : '未选择病例';
+  if (els.ctxCase) els.ctxCase.textContent = `当前病例：${caseLabel}`;
+  const count = (chat.attachments || []).length;
+  if (els.ctxAttachments) {
+    els.ctxAttachments.hidden = !count;
+    els.ctxAttachments.textContent = `${count} 个附件`;
+  }
+}
+function updateModelChip() {
+  if (!els.chipModel) return;
+  const cfg = rememberedApiConfig || (rememberedApiHistory || [])[0];
+  els.chipModel.textContent = cfg?.model ? cfg.model : (cfg?.provider ? `${cfg.provider} / 未选模型` : '本地知识库');
+  els.chipModel.title = cfg?.provider ? `当前模型：${cfg.provider} / ${cfg.model || '未选模型'}` : '未配置 API Key 时使用本地知识库兜底回答';
+  if (els.chipImagePolicy) {
+    if (cfg?.provider) {
+      els.chipImagePolicy.textContent = `图片将发送至 ${cfg.provider}`;
+      els.chipImagePolicy.title = '配置了第三方模型 API Key 后，讨论中携带的图片会作为多模态输入发送给该模型；未配置时图片仅在本地处理';
+      els.chipImagePolicy.classList.add('chip-warn');
+      els.chipImagePolicy.classList.remove('chip-success');
+    } else {
+      els.chipImagePolicy.textContent = '图片仅本机处理';
+      els.chipImagePolicy.title = '未配置 API Key 时，上传图片只保存在本机，不发送给任何第三方服务';
+      els.chipImagePolicy.classList.remove('chip-warn');
+      els.chipImagePolicy.classList.add('chip-success');
+    }
+  }
 }
 function renderMessage(msg) {
   const row = document.createElement('div');
@@ -224,7 +303,7 @@ function renderMessage(msg) {
   if (msg.report?.display_evidence_cards !== false && msg.report?.similar_cases?.length) bubble.appendChild(renderCaseLinks(msg.report.similar_cases));
   if (msg.candidates?.length) bubble.appendChild(renderCandidateLinks(msg.candidates));
   if (msg.report?.display_evidence_cards !== false && msg.report?.related_articles?.length) bubble.appendChild(renderArticleLinks(msg.report.related_articles));
-  row.appendChild(bubble); els.chatWindow.appendChild(row);
+  row.appendChild(bubble); els.chatThread.appendChild(row);
 }
 function renderAttachments(files) {
   const wrap = document.createElement('div'); wrap.className = 'attachment-list';
@@ -274,6 +353,25 @@ function renderCandidateLinks(candidates) {
 
 function selectCandidateInChat(c) {
   const chat = currentChat();
+  // 跨患者保护：已确认过一位患者后再选择其他候选，必须明确是同一患者补充还是另一位患者
+  if (chat.selectedCandidateId && chat.selectedCandidateId !== c.candidate_id && chatHasExistingCase(chat)) {
+    const existingLabel = chat.title || '当前病例';
+    const newLabel = c.display_title || c.candidate_id || '新候选患者';
+    askCaseChoice({
+      sourceLabel: `新选择的候选患者「${newLabel}」`,
+      existingLabel,
+      onMerge: () => applyCandidateToChat(chat, c),
+      onNewCase: () => {
+        createChat(true);
+        applyCandidateToChat(currentChat(), c);
+        addMessage('assistant', `已为候选患者「${newLabel}」开启新的病例讨论（原病例「${existingLabel}」保持不变）。`);
+      },
+    });
+    return;
+  }
+  applyCandidateToChat(chat, c);
+}
+function applyCandidateToChat(chat, c) {
   chat.selectedCandidateId = c.candidate_id || '';
   const merged = { ...(chat.patient || {}) };
   for (const k of ['name','sex','age','diagnosis','ls','tnm','lymph_node','history','symptoms','tumor','imaging','pathology','surgery','other_treatment','followup','free_text']) {
@@ -285,7 +383,7 @@ function selectCandidateInChat(c) {
   saveChats();
   renderHistory();
   renderChat();
-  analyzeSelectedCandidate(c);
+  if (chat.id === state.activeId) analyzeSelectedCandidate(c);
 }
 
 async function analyzeSelectedCandidate(c) {
@@ -481,6 +579,29 @@ async function sendMessage() {
     replaceMessage(typing.id, { content: `请求失败：${err.message}\n请确认 Flask 后端仍在运行。` });
   } finally { chatRequestInFlight = false; els.sendBtn.disabled = false; els.input.focus(); }
 }
+const CLINICAL_FIELD_KEYS = ['age','sex','diagnosis','history','symptoms','tumor','imaging','pathology','tnm','lymph_node'];
+function hasClinicalFields(fields) {
+  return CLINICAL_FIELD_KEYS.filter(key => String((fields || {})[key] || '').trim()).length >= 3;
+}
+function chatHasExistingCase(chat) {
+  return Boolean(chat?.caseConfirmed) || Object.keys(chat?.patient || {}).length > 0;
+}
+
+let pendingCaseChoice = null;
+function askCaseChoice({ sourceLabel, existingLabel, onMerge, onNewCase }) {
+  pendingCaseChoice = { onMerge, onNewCase };
+  if (els.caseChoiceTip) els.caseChoiceTip.textContent = `当前对话已有病例「${existingLabel}」。${sourceLabel} 是同一位患者的补充资料，还是另一位患者？`;
+  if (els.caseChoiceModal) els.caseChoiceModal.hidden = false;
+}
+function resolveCaseChoice(which) {
+  const pending = pendingCaseChoice;
+  pendingCaseChoice = null;
+  if (els.caseChoiceModal) els.caseChoiceModal.hidden = true;
+  if (!pending) return;
+  if (which === 'merge') pending.onMerge();
+  else if (which === 'new') pending.onNewCase();
+}
+
 async function uploadFile(file) {
   const chat = currentChat();
   const fd = new FormData(); fd.append('file', file);
@@ -490,27 +611,51 @@ async function uploadFile(file) {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || data.note || '上传失败');
     const attachment = { filename: data.filename, stored_as: data.stored_as, url: data.url, type: data.type, batch_id: data.batch_id, candidate_count: data.candidate_count };
-    chat.attachments = [...(chat.attachments || []), attachment];
-    if (data.fields && Object.keys(data.fields).length) {
-      chat.patient = { ...(chat.patient || {}), ...data.fields };
-      const clinicalKeys = ['age','sex','diagnosis','history','symptoms','tumor','imaging','pathology','tnm','lymph_node'];
-      chat.caseConfirmed = clinicalKeys.filter(key => String(data.fields[key] || '').trim()).length >= 3;
-      refreshChatTitle(chat);
-    }
-    saveChats();
-    const fieldNames = Object.keys(data.fields || {}).join('、');
-    let text = fieldNames ? `已读取病例文件：${data.filename}
+    const fields = data.fields || {};
+    const finishUpload = (targetChat) => {
+      targetChat.attachments = [...(targetChat.attachments || []), attachment];
+      if (fields && Object.keys(fields).length) {
+        targetChat.patient = { ...(targetChat.patient || {}), ...fields };
+        targetChat.caseConfirmed = hasClinicalFields(fields) || Boolean(targetChat.caseConfirmed);
+        refreshChatTitle(targetChat);
+      }
+      saveChats();
+      const fieldNames = Object.keys(fields).join('、');
+      let text = fieldNames ? `已读取病例文件：${data.filename}
 自动识别字段：${fieldNames}
 已纳入当前对话。` : `已上传：${data.filename}
 ${data.note || ''}`;
-    let candidates = [];
-    if (data.type === 'candidate_case_batch') {
-      candidates = data.candidate_preview || [];
-      text = `已读取病例数据表：${data.filename}
+      let candidates = [];
+      if (data.type === 'candidate_case_batch') {
+        candidates = data.candidate_preview || [];
+        text = `已读取病例数据表：${data.filename}
 识别到 ${data.candidate_count || candidates.length || 0} 条候选病例。请先在下方选择当前患者；选择后系统会在本对话内生成初步分析，之后医生可继续追问。`;
+      }
+      addMessage('assistant', text, { attachments: [attachment], patient: {}, candidates });
+      els.uploadStatus.textContent = data.note || '上传完成。';
+    };
+    // 跨患者保护：当前对话已有病例且新文件识别出另一位患者的临床字段时，必须由医生选择合并或另开病例
+    if (hasClinicalFields(fields) && chatHasExistingCase(chat)) {
+      const existingLabel = chat.title || '当前病例';
+      askCaseChoice({
+        sourceLabel: `新上传的「${data.filename}」`,
+        existingLabel,
+        onMerge: () => finishUpload(chat),
+        onNewCase: () => {
+          const previous = chat;
+          createChat(true);
+          const fresh = currentChat();
+          if (previous.attachments?.length) {
+            previous.attachments = previous.attachments.filter(a => a !== attachment);
+          }
+          finishUpload(fresh);
+          addMessage('assistant', `已为「${data.filename}」开启新的病例讨论（原病例「${existingLabel}」保持不变）。`);
+        },
+      });
+      els.uploadStatus.textContent = '已上传，等待确认病例归属。';
+      return;
     }
-    addMessage('assistant', text, { attachments: [attachment], patient: data.fields || {}, candidates });
-    els.uploadStatus.textContent = data.note || '上传完成。';
+    finishUpload(chat);
   } catch (err) { els.uploadStatus.textContent = `上传失败：${err.message}`; addMessage('assistant', `上传失败：${err.message}`); }
   finally { els.fileInput.value = ''; }
 }
@@ -529,7 +674,14 @@ async function loadSummary() {
     const res = await fetch('/api/summary'); const data = await res.json();
     const groups = Object.entries(data.sheets || {}).map(([k,v]) => `${k} ${v}`).join('｜');
     els.kbSummary.innerHTML = `病例总数：${escapeHtml(data.total_cases)}｜文章 ${escapeHtml(data.articles || 0)}<br>${escapeHtml(groups || '暂无分组')}`;
+    if (els.statCases) els.statCases.textContent = data.total_cases ?? '—';
+    if (els.statArticles) els.statArticles.textContent = data.articles ?? '—';
   } catch (_) { els.kbSummary.textContent = '知识库读取失败'; }
+  try {
+    const res = await fetch('/api/storage/status', {cache:'no-store'}); const data = await res.json();
+    if (els.statImages) els.statImages.textContent = data.upload_images ?? data.upload_files ?? '—';
+    if (els.statUserCases) els.statUserCases.textContent = data.user_cases ?? '—';
+  } catch (_) {}
 }
 
 const API_PROVIDER_CONFIG = {
@@ -610,12 +762,14 @@ async function fetchRememberedApiConfig() {
       }
       const hint = rememberedApiConfig?.provider ? `已记住：${rememberedApiConfig.provider} / ${rememberedApiConfig.model || '未选模型'}${rememberedApiConfig.api_key_masked ? ' / ' + rememberedApiConfig.api_key_masked : ''}` : '当前后端未记住 API 配置。';
       if (els.savedApiConfigHint) els.savedApiConfigHint.textContent = hint;
+      updateModelChip();
       return rememberedApiConfig;
     }
   } catch (_) {}
   if (els.savedApiConfigHint) els.savedApiConfigHint.textContent = '当前后端未记住 API 配置。';
   rememberedApiConfig = null;
   rememberedApiHistory = [];
+  updateModelChip();
   return null;
 }
 
@@ -883,6 +1037,10 @@ els.newChatBtn.addEventListener('click', () => {
   els.input.focus();
 });
 els.addCurrentCaseBtn.addEventListener('click', addCurrentCase);
+els.taskUploadImaging?.addEventListener('click', () => els.fileInput.click());
+els.choiceMergeCase?.addEventListener('click', () => resolveCaseChoice('merge'));
+els.choiceNewCase?.addEventListener('click', () => resolveCaseChoice('new'));
+els.closeCaseChoice?.addEventListener('click', () => resolveCaseChoice('cancel'));
 els.fileInput.addEventListener('change', e => { const file = e.target.files?.[0]; if (file) uploadFile(file); });
 els.mobileMenuBtn.addEventListener('click', () => els.sidebar.classList.toggle('open'));
 els.apiKeyBtn.addEventListener('click', () => { openApiModal(); });

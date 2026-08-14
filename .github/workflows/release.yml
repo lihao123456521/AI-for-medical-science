@@ -2,14 +2,28 @@ name: Build release packages
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
+  test:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q
+
   release:
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
     runs-on: windows-latest
     steps:
       - name: Check out source
@@ -30,9 +44,12 @@ jobs:
             throw "Private API configuration must not be published"
           }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $zip = [IO.Compression.ZipFile]::OpenRead("dist/AI-for-medical-science-windows.zip")
+          $zip = [IO.Compression.ZipFile]::OpenRead("dist/UroPUC-windows.zip")
           $names = @($zip.Entries | ForEach-Object { $_.FullName.Replace("\", "/") })
           $zip.Dispose()
+          if ("AI-for-medical-science/UroPUC.exe" -notin $names) {
+            throw "Windows release ZIP must contain AI-for-medical-science/UroPUC.exe"
+          }
           foreach ($required in @(
             "AI-for-medical-science/data/seed/manifest.json",
             "AI-for-medical-science/data/seed/user_cases.json",
@@ -50,10 +67,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" `
-            dist/AI-for-medical-science-windows.zip `
-            dist/AI-for-medical-science-macos.tar.gz `
-            dist/AI-for-medical-science-linux.tar.gz `
-            dist/AI-rare-disease-assistant.exe `
+            dist/UroPUC-windows.zip `
+            dist/UroPUC-macos.tar.gz `
+            dist/UroPUC-linux.tar.gz `
+            dist/UroPUC.exe `
             --repo "${{ github.repository }}" `
-            --title "AI for Medical Science ${{ github.ref_name }}" `
+            --title "UroPUC ${{ github.ref_name }}" `
             --generate-notes

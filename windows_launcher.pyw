@@ -15,11 +15,11 @@ from tkinter import Tk, Label, Button, StringVar, messagebox, Canvas, PhotoImage
 from tkinter import ttk
 
 
-APP_TITLE = "AI罕见病助手"
+APP_TITLE = "UroPUC"
 BASE_DIR = Path(__file__).resolve().parent
 LOG_PATH = BASE_DIR / "launcher.log"
 DEFAULT_PORT = 5000
-EXPECTED_BUILD_ID = "2026.06.13-v39"
+EXPECTED_BUILD_ID = "2026.08.15-v40"
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 ICON_PATH = BASE_DIR / "static" / "assets" / "app_icon.ico"
 ICON_PNG_PATH = BASE_DIR / "static" / "assets" / "app_icon.png"
@@ -36,7 +36,7 @@ def set_app_user_model_id() -> None:
     try:
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AI.RareDisease.Assistant")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("UroPUC.Desktop")
     except Exception as exc:
         log("AppUserModelID skipped: " + repr(exc))
 
@@ -110,7 +110,7 @@ def ensure_desktop_shortcut() -> None:
     desktop = Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop"
     if not desktop.exists():
         return
-    shortcut = desktop / "AI罕见病助手.lnk"
+    shortcut = desktop / "UroPUC.lnk"
     target = find_pythonw()
     arguments = f'"{BASE_DIR / "windows_launcher.pyw"}"'
     icon = str(ICON_PATH if ICON_PATH.exists() else target)
@@ -120,7 +120,7 @@ def ensure_desktop_shortcut() -> None:
         f"$lnk.TargetPath='{target}';"
         f"$lnk.Arguments='{arguments}';"
         f"$lnk.WorkingDirectory='{BASE_DIR}';"
-        "$lnk.Description='AI罕见病助手';"
+        "$lnk.Description='UroPUC 尿道肿瘤科研工作台';"
         f"$lnk.IconLocation='{icon},0';"
         "$lnk.WindowStyle=1;"
         "$lnk.Save();"
@@ -289,7 +289,7 @@ def launch(status: StringVar, root: Tk) -> None:
         status.set("正在打开应用窗口...")
         wait_for_server(process, port)
         open_app_window(port)
-        status.set("已打开 AI 罕见病助手。")
+        status.set("已打开 UroPUC。")
         root.after(1800, root.destroy)
     except Exception as exc:
         log("ERROR " + repr(exc))
@@ -340,7 +340,7 @@ def build_splash(root: Tk, status: StringVar) -> None:
             log("Splash image skipped: " + repr(exc))
 
     Label(root, text=APP_TITLE, bg=CARD_COLOR, fg=TEXT_COLOR, font=("Microsoft YaHei UI", 18, "bold")).place(x=128, y=54)
-    Label(root, text="Preparing your local medical assistant", bg=CARD_COLOR, fg=MUTED_COLOR, font=("Microsoft YaHei UI", 10)).place(x=130, y=88)
+    Label(root, text="Urothelial research workbench · starting locally", bg=CARD_COLOR, fg=MUTED_COLOR, font=("Microsoft YaHei UI", 10)).place(x=130, y=88)
     Label(root, textvariable=status, bg=CARD_COLOR, fg=TEXT_COLOR, font=("Microsoft YaHei UI", 10, "bold")).place(x=50, y=144)
 
     progress = ttk.Progressbar(root, mode="indeterminate", length=356, style="Splash.Horizontal.TProgressbar")

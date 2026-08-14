@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 internal static class WindowsExeLauncher
 {
-    private const string AppTitle = "AI罕见病助手";
+    private const string AppTitle = "UroPUC";
 
     [STAThread]
     private static int Main()

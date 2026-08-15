@@ -125,8 +125,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $setup = (Get-ChildItem "dist/desktop/UroPUC-Setup-*.exe" | Select-Object -First 1).FullName
           gh release create "${{ github.ref_name }}" `
-            dist/desktop/UroPUC-Setup-*.exe `
+            $setup `
             dist/UroPUC-windows.zip `
             dist/UroPUC-macos.tar.gz `
             dist/UroPUC-linux.tar.gz `

@@ -29,7 +29,66 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Build release packages
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install desktop toolchain
+        run: npm ci
+
+      - name: Build PyInstaller backend (onedir)
+        shell: powershell
+        run: ./packaging/build_backend.ps1
+
+      - name: Verify backend bundle
+        shell: powershell
+        run: |
+          $backendExe = "dist/backend/UroPUCBackend/UroPUCBackend.exe"
+          if (-not (Test-Path $backendExe)) {
+            throw "Backend executable missing: $backendExe"
+          }
+          $seed = "dist/backend/UroPUCBackend/_internal/data/seed/manifest.json"
+          if (-not (Test-Path $seed)) {
+            throw "Public seed data missing from backend bundle"
+          }
+          $internal = "dist/backend/UroPUCBackend/_internal"
+          foreach ($required in @("templates", "static", "data/knowledge_base.xlsx")) {
+            if (-not (Test-Path (Join-Path $internal $required))) {
+              throw "Backend bundle missing: $required"
+            }
+          }
+
+      - name: Build Electron installer (NSIS)
+        run: npx electron-builder --win nsis
+
+      - name: Verify installer and packaged app
+        shell: powershell
+        run: |
+          $setup = Get-ChildItem "dist/desktop/UroPUC-Setup-*.exe" -ErrorAction Stop | Select-Object -First 1
+          Write-Host "Installer: $($setup.FullName) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
+          if ($setup.Length -lt 50MB) {
+            throw "Installer looks too small; backend may be missing"
+          }
+          $unpackedBackend = "dist/desktop/win-unpacked/resources/backend/UroPUCBackend/UroPUCBackend.exe"
+          if (-not (Test-Path $unpackedBackend)) {
+            throw "Packaged app missing backend executable: $unpackedBackend"
+          }
+          # 安装包内不得出现私密数据
+          $resources = "dist/desktop/win-unpacked/resources"
+          $privateHits = Get-ChildItem $resources -Recurse -File |
+            Where-Object { $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json") }
+          if ($privateHits) {
+            throw "Private data leaked into installer: $($privateHits.FullName -join ', ')"
+          }
+
+      - name: Build legacy release packages
         shell: powershell
         run: ./scripts/build_release_packages.ps1 -Version "${{ github.ref_name }}"
 
@@ -67,6 +126,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" `
+            dist/desktop/UroPUC-Setup-*.exe `
             dist/UroPUC-windows.zip `
             dist/UroPUC-macos.tar.gz `
             dist/UroPUC-linux.tar.gz `

@@ -1,0 +1,56 @@
+{
+  "name": "uropuc-desktop",
+  "productName": "UroPUC",
+  "version": "1.0.0",
+  "private": true,
+  "description": "UroPUC desktop app: Electron shell around the local Flask backend.",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "desktop:dev": "electron . --dev",
+    "desktop:start": "electron .",
+    "backend:build": "powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_backend.ps1",
+    "desktop:dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "edu.sjtu.uropuc",
+    "productName": "UroPUC",
+    "asar": true,
+    "directories": {
+      "output": "dist/desktop"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/backend/UroPUCBackend",
+        "to": "backend/UroPUCBackend"
+      }
+    ],
+    "win": {
+      "icon": "static/assets/app_icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "UroPUC",
+      "artifactName": "UroPUC-Setup-${version}.${ext}"
+    }
+  }
+}

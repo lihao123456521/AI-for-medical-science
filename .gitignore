@@ -8,6 +8,9 @@ launcher.log
 dist/*.zip
 dist/*.tar.gz
 dist/*.exe
+dist/backend/
+dist/desktop/
+node_modules/
 
 # Runtime data and uploads may contain sensitive medical information.
 uploads/*

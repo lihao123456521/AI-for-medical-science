@@ -11,6 +11,8 @@ dist/*.exe
 dist/backend/
 dist/desktop/
 node_modules/
+.electron-cache/
+.electron-builder-cache/
 
 # Runtime data and uploads may contain sensitive medical information.
 uploads/*

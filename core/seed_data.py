@@ -30,6 +30,17 @@ LABELED_ID_RE = re.compile(r"(?:(?:住院|病案|身份证|影像|检查|门诊|
 EXACT_DATE_RE = re.compile(r"(?<!\d)(19\d{2}|20\d{2})[-/.年](?:0?[1-9]|1[0-2])[-/.月](?:0?[1-9]|[12]\d|3[01])日?(?!\d)")
 SOURCE_FILE_RE = re.compile(r"[^\s，。；;（）()]+\.(?:pdf|docx?|xlsx?|csv|txt|md|png|jpe?g|dcm)", re.I)
 
+STRUCTURED_IDENTITY_KEYS = {
+    "patientname", "name", "fullname", "姓名", "患者姓名",
+    "住院号", "病案号", "身份证", "身份证号", "联系电话", "手机号", "家庭住址", "地址",
+    "hospitalid", "hospitalnumber", "medicalrecordnumber", "idcard", "idnumber",
+    "phone", "telephone", "mobile", "homeaddress",
+}
+STRUCTURED_SECRET_KEYS = {"apikey", "authorization", "authtoken", "accesstoken"}
+STRUCTURED_LOCAL_KEYS = {
+    "sourcedocument", "sourcefile", "storedas", "sourcehash", "sourceimportkey", "sourcecasenumber",
+}
+
 
 def _sanitize_text(value: Any, identity_values: list[str] | None = None) -> str:
     text = str(value or "")
@@ -58,13 +69,58 @@ def _sanitize_value(value: Any, identity_values: list[str] | None = None) -> Any
     return value
 
 
+def _structured_key(value: Any) -> str:
+    return re.sub(r"[\s_-]+", "", str(value or "")).casefold()
+
+
+def _collect_structured_identities(value: Any) -> list[str]:
+    identities: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if _structured_key(key) in STRUCTURED_IDENTITY_KEYS and isinstance(item, (str, int)):
+                identity = str(item).strip()
+                if identity:
+                    identities.append(identity)
+            identities.extend(_collect_structured_identities(item))
+    elif isinstance(value, list):
+        for item in value:
+            identities.extend(_collect_structured_identities(item))
+    return identities
+
+
+def _sanitize_external_json(value: Any, identity_values: list[str]) -> Any:
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            normalized = _structured_key(key)
+            if normalized in STRUCTURED_IDENTITY_KEYS:
+                cleaned[key] = "[身份信息已脱敏]"
+            elif normalized in STRUCTURED_SECRET_KEYS:
+                cleaned[key] = "[API密钥已移除]"
+            elif normalized in STRUCTURED_LOCAL_KEYS:
+                cleaned[key] = "[本机来源信息已移除]"
+            else:
+                cleaned[key] = _sanitize_external_json(item, identity_values)
+        return cleaned
+    if isinstance(value, list):
+        return [_sanitize_external_json(item, identity_values) for item in value]
+    if isinstance(value, str):
+        return _sanitize_text(value, identity_values)
+    return value
+
+
 def sanitize_for_external_llm(text: str) -> str:
     """统一出站脱敏：把病例文本/上下文发送给第三方 LLM 前调用。
 
     用于对真实患者资料在离开本机前做去标识化（姓名、病案号、身份证号、
     电话、邮箱、精确日期、本机路径、API Key、源文件名等）。
     """
-    return _sanitize_text(text)
+    try:
+        structured = json.loads(str(text or ""))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return _sanitize_text(text)
+    identities = _collect_structured_identities(structured)
+    return json.dumps(_sanitize_external_json(structured, identities), ensure_ascii=False)
 
 
 def _public_case(row: dict[str, Any], index: int) -> dict[str, Any]:

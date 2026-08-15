@@ -12,18 +12,30 @@ permissions:
 
 jobs:
   test:
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: pip install -r requirements.txt pytest
       - run: python -m pytest -q
+      - name: Check JavaScript syntax
+        run: |
+          node --check static/js/app.js
+          node --check static/js/articles.js
+          node --check static/js/knowledge.js
+          node --check desktop/main.cjs
+          node --check desktop/preload.cjs
+          node --check desktop/backend-manager.cjs
+          node --check desktop/screenshot-tool.cjs
 
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: test
     runs-on: windows-latest
     steps:
       - name: Check out source
@@ -39,6 +51,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+
+      - name: Verify release version contract
+        shell: powershell
+        run: |
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ("${{ github.ref_name }}" -ne "v$packageVersion") {
+            throw "Tag ${{ github.ref_name }} does not match package version v$packageVersion"
+          }
 
       - name: Install desktop toolchain
         run: npm ci
@@ -83,7 +103,7 @@ jobs:
           # 安装包内不得出现私密数据
           $resources = "dist/desktop/win-unpacked/resources"
           $privateHits = Get-ChildItem $resources -Recurse -File |
-            Where-Object { $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json") }
+            Where-Object { $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json", "case_label_overrides.json") }
           if ($privateHits) {
             throw "Private data leaked into installer: $($privateHits.FullName -join ', ')"
           }

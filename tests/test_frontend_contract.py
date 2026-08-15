@@ -56,6 +56,27 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("resetIdleTimer", stream_body)
         self.assertGreaterEqual(stream_body.count("resetIdleTimer()"), 2)
 
+    def test_stream_updates_the_originating_chat_after_history_switch(self):
+        replace_body = self._function_body("replaceMessage")
+        update_body = self._function_body("updateStreamingBubble")
+
+        self.assertIn("findChatByMessageId", replace_body)
+        self.assertNotIn("const chat = currentChat()", replace_body)
+        self.assertIn("findChatByMessageId", update_body)
+        self.assertIn("message.content = text", update_body)
+
+    def test_stream_network_error_preserves_partial_text(self):
+        stream_body = self._function_body("streamChat")
+
+        self.assertIn("catch (err)", stream_body)
+        self.assertRegex(stream_body, r"if \(answerText\)[\s\S]*replaceMessage\(typingId")
+
+    def test_failed_initial_brief_can_be_retried(self):
+        body = self._function_body("analyzeSelectedCandidate")
+
+        self.assertIn("briefGeneratedFor = ''", body)
+        self.assertIn("saveChats()", body)
+
     def test_remembered_api_history_has_independent_delete_action(self):
         history_body = self._function_body("renderApiHistoryList")
 

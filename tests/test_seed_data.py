@@ -99,6 +99,38 @@ class SeedDataTests(unittest.TestCase):
         parsed = json.loads(out)
         self.assertEqual(parsed["conversation_mode"], "initial_patient_brief")
 
+    def test_outbound_sanitizer_redacts_structured_json_identity_fields(self):
+        context = {
+            "patient_name": "张三",
+            "name": "李四",
+            "姓名": "王五",
+            "住院号": "H123456",
+            "病案号": "M123456",
+            "身份证号": "310101199001011234",
+            "联系电话": "13800138000",
+            "家庭住址": "上海市某区某路 1 号",
+            "age": 65,
+            "sex": "男",
+            "diagnosis": "尿道鳞状细胞癌",
+            "tnm": "T2N0M0",
+            "pathology": "鳞状细胞癌",
+            "imaging": "尿道占位",
+            "treatment": "手术",
+            "followup": "未见复发",
+            "history_messages": [
+                {"role": "user", "content": "请分析患者张三，住院号 H123456。"},
+            ],
+        }
+        out = sanitize_for_external_llm(json.dumps(context, ensure_ascii=False))
+        parsed = json.loads(out)
+
+        for key in ("patient_name", "name", "姓名", "住院号", "病案号", "身份证号", "联系电话", "家庭住址"):
+            self.assertNotEqual(parsed[key], context[key], key)
+        self.assertNotIn("张三", out)
+        self.assertNotIn("H123456", out)
+        for key in ("age", "sex", "diagnosis", "tnm", "pathology", "imaging", "treatment", "followup"):
+            self.assertEqual(parsed[key], context[key], key)
+
     def test_initialize_only_populates_empty_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

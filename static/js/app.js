@@ -428,6 +428,10 @@ async function analyzeSelectedCandidate(c) {
       ...apiPayloadExtras(),
     }, typing.id);
   } catch (err) {
+    if (chat.briefGeneratedFor === c.candidate_id) {
+      chat.briefGeneratedFor = '';
+      saveChats();
+    }
     replaceMessage(typing.id, { content: `初步整理失败：${err.message}` });
   }
 }
@@ -461,14 +465,28 @@ function addMessage(role, content, extra = {}) {
   if (extra.patient) { chat.patient = { ...(chat.patient || {}), ...extra.patient }; refreshChatTitle(chat); }
   saveChats(); renderHistory(); renderChat(); return msg;
 }
+function findChatByMessageId(id) {
+  for (const chat of state.chats) {
+    const message = (chat.messages || []).find(item => item.id === id);
+    if (message) return { chat, message };
+  }
+  return { chat: null, message: null };
+}
 function replaceMessage(id, patch) {
-  const chat = currentChat();
-  const idx = chat.messages.findIndex(m => m.id === id);
-  if (idx >= 0) { chat.messages[idx] = { ...chat.messages[idx], ...patch }; saveChats(); renderChat(); }
+  const { chat, message } = findChatByMessageId(id);
+  if (!chat || !message) return;
+  Object.assign(message, patch);
+  chat.updatedAt = Date.now();
+  saveChats();
+  renderHistory();
+  if (chat.id === state.activeId) renderChat();
 }
 function scrollToBottom() { requestAnimationFrame(() => { els.chatWindow.scrollTop = els.chatWindow.scrollHeight; }); }
 
 function updateStreamingBubble(id, text) {
+  const { chat, message } = findChatByMessageId(id);
+  if (message) message.content = text;
+  if (!chat || chat.id !== state.activeId) return;
   const row = document.querySelector(`[data-msg-id="${id}"]`);
   if (!row) return;
   // 结构化定位 message-content，加入头像/列结构后不依赖 first-child 位置
@@ -481,6 +499,7 @@ function updateStreamingBubble(id, text) {
 
 async function streamChat(url, payload, typingId) {
   const controller = new AbortController();
+  const streamOrigin = findChatByMessageId(typingId).chat;
   let timer = null;
   const resetIdleTimer = () => {
     clearTimeout(timer);
@@ -520,7 +539,7 @@ async function streamChat(url, payload, typingId) {
           answerText += evt.text;
           updateStreamingBubble(typingId, answerText);
         } else if (evt.type === 'done') {
-          const chat = currentChat();
+          const chat = streamOrigin || currentChat();
           const hasCandidateBatch = (chat.attachments || []).some(a => a.type === 'candidate_case_batch');
           const q = String(payload.question || '');
           const asksMatch = /候选|匹配|哪个病人|哪位患者|查找患者|识别患者|选择患者|住院号|姓名|年龄/.test(q);
@@ -550,6 +569,17 @@ async function streamChat(url, payload, typingId) {
     if (!done && answerText) {
       replaceMessage(typingId, { content: normalizeBackendMessage(answerText), report: { similar_cases: [], related_articles: [] } });
     }
+  } catch (err) {
+    const errorText = err?.name === 'AbortError'
+      ? '连接等待超时；供应商可能已接收请求，请先核对供应商记录，不要立即重复发送。'
+      : `连接中断：${err?.message || err}`;
+    if (answerText) {
+      answerText += `\n\n（${errorText} 已保留此前生成的内容。）`;
+      replaceMessage(typingId, { content: normalizeBackendMessage(answerText), report: { similar_cases: [], related_articles: [] } });
+      return;
+    }
+    if (err?.name === 'AbortError') throw new Error(errorText);
+    throw err;
   } finally {
     clearTimeout(timer);
   }

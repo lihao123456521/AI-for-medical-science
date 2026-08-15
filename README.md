@@ -6,11 +6,15 @@ This project is intended for teaching, research discussion, and prototype demons
 
 ## Download Now
 
-| Windows | macOS | Linux |
-| --- | --- | --- |
-| **[Download UroPUC Windows ZIP](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-windows.zip)** | **[Download UroPUC macOS TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-macos.tar.gz)** | **[Download UroPUC Linux TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-linux.tar.gz)** |
+**Windows (recommended):** open the [latest release](https://github.com/lihao123456521/AI-for-medical-science/releases/latest) and download `UroPUC-Setup-<version>.exe`. This installer is self-contained and does not require Python, Node.js, or a source checkout. Double-click it and use the Start menu or desktop shortcut after installation.
 
-Windows users: extract `UroPUC-windows.zip` and double-click `UroPUC.exe` in the extracted root folder. The launcher starts the local service and opens the app window automatically — no PowerShell needed. `start_windows_local.bat` is kept as a fallback.
+The current installer is not code-signed. Windows may show an "Unknown publisher" or SmartScreen warning; verify the download came from the repository's official Releases page before running it.
+
+| Legacy Windows package | macOS | Linux |
+| --- | --- | --- |
+| [UroPUC Windows ZIP](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-windows.zip) | [UroPUC macOS TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-macos.tar.gz) | [UroPUC Linux TAR.GZ](https://github.com/lihao123456521/AI-for-medical-science/releases/latest/download/UroPUC-linux.tar.gz) |
+
+The ZIP/TAR packages remain available for legacy and developer workflows. They are source-based packages and may install Python dependencies from the network on first launch.
 
 ## Promotional Video
 
@@ -22,7 +26,7 @@ Windows users: extract `UroPUC-windows.zip` and double-click `UroPUC.exe` in the
 
 If your browser blocks video playback, open the compressed demo here: [AI rare disease treatment video](docs/media/ai-rare-disease-treatment-promo-small.mp4).
 
-## Download Packages
+## Legacy Download Packages
 
 The packages are portable source-based installers — they are **not** fully self-contained apps. Python 3.10 or newer must be installed first; on first launch the package startup scripts create a virtual environment and may install the required Python libraries from the network.
 

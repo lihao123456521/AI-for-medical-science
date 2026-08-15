@@ -92,6 +92,24 @@ MAX_IMAGE_MB = int(os.getenv("MAX_IMAGE_MB", "20"))
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "").strip()
 
 
+def _has_valid_image_signature(path: Path, suffix: str) -> bool:
+    if suffix == ".dcm":
+        # DICOM files may legally omit the 128-byte preamble and DICM marker.
+        return True
+    with path.open("rb") as stream:
+        header = stream.read(16)
+    checks = {
+        ".png": header.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": header.startswith(b"\xff\xd8\xff"),
+        ".jpeg": header.startswith(b"\xff\xd8\xff"),
+        ".bmp": header.startswith(b"BM"),
+        ".tif": header.startswith((b"II*\x00", b"MM\x00*")),
+        ".tiff": header.startswith((b"II*\x00", b"MM\x00*")),
+        ".webp": len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP",
+    }
+    return checks.get(suffix, False)
+
+
 @app.before_request
 def _require_auth_for_api():
     """可选访问令牌：设置 AUTH_TOKEN 后，远程 /api/* 请求需携带 X-Auth-Token 头。
@@ -1642,6 +1660,19 @@ def add_no_cache_headers(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
@@ -1877,6 +1908,10 @@ def api_upload_article():
     stored_name = f"{uuid.uuid4().hex}_{safe_stem}{suffix}"
     dest = UPLOAD_DIR / stored_name
     file.save(dest)
+
+    if dest.stat().st_size == 0:
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": "文件为空，请选择包含有效内容的文件。"}), 400
     text = _extract_article_text(dest)
     images = _extract_article_images(dest)
     saved_api = _load_saved_api_config()
@@ -2449,9 +2484,17 @@ def api_upload():
     dest = UPLOAD_DIR / stored_name
     file.save(dest)
 
+    if dest.stat().st_size == 0:
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": "文件为空，请选择包含有效内容的文件。"}), 400
+
     if suffix in IMAGE_EXTENSIONS and dest.stat().st_size > MAX_IMAGE_MB * 1024 * 1024:
         dest.unlink(missing_ok=True)
         return jsonify({"ok": False, "error": f"图片过大：单张图片不能超过 {MAX_IMAGE_MB}MB。"}), 413
+
+    if suffix in IMAGE_EXTENSIONS and not _has_valid_image_signature(dest, suffix):
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": "图片文件损坏，或扩展名与实际格式不一致。"}), 400
 
     response = {
         "ok": True,
@@ -2465,8 +2508,12 @@ def api_upload():
     }
 
     if suffix in CASE_TABLE_EXTENSIONS:
-        parsed = parse_case_file(dest)
-        candidates = _extract_case_batch_candidates(dest, original_name) if suffix in CASE_TABLE_EXTENSIONS else []
+        try:
+            parsed = parse_case_file(dest)
+            candidates = _extract_case_batch_candidates(dest, original_name)
+        except Exception:
+            dest.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": "文件损坏或无法解析，请检查文件后重试。"}), 400
         if candidates:
             batch_id = candidates[0].get("batch_id")
             response.update({
@@ -2479,7 +2526,8 @@ def api_upload():
                 "note": f"已读取病例数据表，共识别 {len(candidates)} 条候选病例。系统已生成候选病例确认卡片，医生可直接选择；也可继续输入年龄、姓名、诊断、病理或住院号等线索后再匹配。",
             })
         elif not parsed.get("ok"):
-            response.update({"type": "case_file", "parse_ok": False, "note": parsed.get("error", "病例表格解析失败。"), "fields": {}})
+            dest.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": parsed.get("error", "病例文件解析失败。")}), 400
         else:
             response.update({
                 "type": "case_file",
@@ -2531,6 +2579,7 @@ def api_export():
         ("user_cases.json", USER_CASES_PATH),
         ("articles.json", ARTICLES_PATH),
         ("case_tags.json", CASE_TAGS_PATH),
+        ("case_label_overrides.json", CASE_LABEL_OVERRIDES_PATH),
         ("deleted_cases.json", DELETED_CASES_PATH),
         ("migration_state.json", MIGRATION_STATE_PATH),
     ]

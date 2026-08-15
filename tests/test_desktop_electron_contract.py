@@ -49,7 +49,19 @@ class DesktopElectronContractTests(unittest.TestCase):
         self.assertIn("preload", source)
         self.assertIn("will-navigate", source)
         self.assertIn("setWindowOpenHandler", source)
+        self.assertIn("setPermissionRequestHandler", source)
+        self.assertIn("setPermissionCheckHandler", source)
+        self.assertIn("callback(false)", source)
+        self.assertIn("isSafeExternalUrl", source)
+        self.assertIn("parsed.protocol === 'https:'", source)
         self.assertIn("backend.stop()", source)
+
+    def test_flask_responses_define_a_content_security_policy(self):
+        source = self.read("app.py")
+
+        self.assertIn('response.headers["Content-Security-Policy"]', source)
+        self.assertIn("object-src 'none'", source)
+        self.assertIn("frame-ancestors 'none'", source)
 
     def test_backend_manager_contract(self):
         source = self.read("desktop", "backend-manager.cjs")
@@ -120,6 +132,18 @@ class DesktopElectronContractTests(unittest.TestCase):
         # 旧 C# launcher 发布链路暂不删除
         self.assertIn("build_release_packages.ps1", source)
         self.assertIn("UroPUC-windows.zip", source)
+
+    def test_tag_release_waits_for_full_python_and_javascript_tests(self):
+        source = self.read(".github", "workflows", "release.yml")
+        test_job = source.split("  test:", 1)[1].split("  release:", 1)[0]
+        release_job = source.split("  release:", 1)[1]
+
+        self.assertNotIn("!startsWith(github.ref, 'refs/tags/')", test_job)
+        self.assertIn("setup-node", test_job)
+        for js_file in ("static/js/app.js", "static/js/knowledge.js", "desktop/main.cjs"):
+            self.assertIn(f"node --check {js_file}", test_job)
+        self.assertIn("needs: test", release_job)
+        self.assertIn("v$packageVersion", release_job)
 
 
 if __name__ == "__main__":

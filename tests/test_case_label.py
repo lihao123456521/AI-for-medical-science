@@ -26,16 +26,27 @@ class CaseLabelTests(unittest.TestCase):
     def test_excel_case_label_editable_and_persisted(self):
         with tempfile.TemporaryDirectory() as tmp:
             runtime = Path(tmp) / "runtime"
+            runtime.mkdir()
+            # Keep the runtime non-empty so app.py retains workbook-backed records.
+            (runtime / "articles.json").write_text('[{"title":"audit-sentinel"}]', encoding="utf-8")
             code = """
 import json
+import zipfile
+from io import BytesIO
 import app
 c = app.app.test_client()
-first = c.get('/api/cases?limit=500').get_json()
-case_id = next((x['case_id'] for x in first.get('cases', []) if str(x['case_id']).startswith(('SEED-CASE-', 'USER-'))), '')
+target = next(r for r in app.kb.records if not app._is_user_case(r))
+case_id = target.case_id
 patched = c.patch(f'/api/case/{case_id}/label', json={'label': '重点随访组'}).get_json()
 after = c.get('/api/cases?limit=500&q=').get_json()
 sheets = {x['case_id']: x.get('sheet') for x in after.get('cases', [])}
-print(json.dumps({'case_id': case_id, 'patched_ok': patched.get('ok'), 'sheet': sheets.get(case_id)}))
+backup_names = zipfile.ZipFile(BytesIO(c.get('/api/export').data)).namelist()
+print(json.dumps({
+    'case_id': case_id,
+    'patched_ok': patched.get('ok'),
+    'sheet': sheets.get(case_id),
+    'override_in_backup': 'case_label_overrides.json' in backup_names,
+}))
 """
             result = run_app_script(code, runtime)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -43,9 +54,11 @@ print(json.dumps({'case_id': case_id, 'patched_ok': patched.get('ok'), 'sheet': 
             self.assertTrue(out["case_id"], "知识库应至少包含一个病例")
             self.assertTrue(out["patched_ok"], "Excel 内置病例标签应允许编辑")
             self.assertEqual(out["sheet"], "重点随访组")
+            self.assertTrue(out["override_in_backup"], "病例标签覆盖必须包含在完整备份中")
+            overrides = json.loads((runtime / "case_label_overrides.json").read_text(encoding="utf-8"))
+            self.assertEqual(overrides[out["case_id"]], "重点随访组")
             saved = json.loads((runtime / "user_cases.json").read_text(encoding="utf-8"))
-            saved_sheet = next((row.get("sheet") for row in saved if row.get("case_id") == out["case_id"]), None)
-            self.assertEqual(saved_sheet, "重点随访组")
+            self.assertFalse(any(row.get("case_id") == out["case_id"] for row in saved))
 
             # 重启进程后覆盖仍然生效
             code_restart = f"""

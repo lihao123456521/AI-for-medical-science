@@ -47,6 +47,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CANDIDATE_BATCH_DIR = PERSISTENT_DATA_DIR / "candidate_batches"
 CANDIDATE_BATCH_DIR.mkdir(parents=True, exist_ok=True)
 USER_CASES_PATH = PERSISTENT_DATA_DIR / "user_cases.json"
+CASE_LABEL_OVERRIDES_PATH = PERSISTENT_DATA_DIR / "case_label_overrides.json"
 DELETED_CASES_PATH = PERSISTENT_DATA_DIR / "deleted_cases.json"
 ARTICLES_PATH = PERSISTENT_DATA_DIR / "articles.json"
 CASE_TAGS_PATH = PERSISTENT_DATA_DIR / "case_tags.json"
@@ -291,6 +292,31 @@ def _apply_deleted_case_filter() -> None:
     deleted = _load_deleted_case_ids()
     if deleted:
         kb.records = [r for r in kb.records if r.case_id not in deleted]
+
+
+def _load_case_label_overrides() -> Dict[str, str]:
+    """Excel 内置病例的标签覆盖：原始工作簿只读，重命名保存在独立 JSON。"""
+    try:
+        data = json.loads(CASE_LABEL_OVERRIDES_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items() if str(k).strip() and str(v).strip()}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_case_label_overrides(overrides: Dict[str, str]) -> None:
+    _atomic_write_json(CASE_LABEL_OVERRIDES_PATH, overrides)
+
+
+def _apply_case_label_overrides() -> None:
+    overrides = _load_case_label_overrides()
+    if not overrides:
+        return
+    for rec in kb.records:
+        label = overrides.get(rec.case_id)
+        if label:
+            rec.sheet = label
 
 
 
@@ -1608,6 +1634,7 @@ if isinstance(_migration_state, dict) and _migration_state.get("public_seed_case
 _load_user_cases()
 _normalize_legacy_user_labels()
 _apply_deleted_case_filter()
+_apply_case_label_overrides()
 
 
 @app.after_request
@@ -2081,10 +2108,18 @@ def api_update_case_label(case_id):
     target = next((r for r in kb.records if r.case_id == case_id), None)
     if not target:
         return jsonify({"ok": False, "error": "未找到该病例。"}), 404
-    if not _is_user_case(target):
-        return jsonify({"ok": False, "error": "默认 Excel 数据库中的原始分组不建议修改；请仅修改用户新增的标签。"}), 400
+    # 用户投喂病例直接改记录并持久化；Excel 内置病例改内存分组，标签覆盖写入独立 JSON
     target.sheet = label
-    _save_user_cases()
+    if _is_user_case(target):
+        _save_user_cases()
+    else:
+        overrides = _load_case_label_overrides()
+        overrides[case_id] = label
+        _save_case_label_overrides(overrides)
+    try:
+        KB_DIGEST_PATH.unlink(missing_ok=True)
+    except Exception:
+        pass
     return jsonify({"ok": True, "case_id": case_id, "label": label, "message": "病例标签已更新。"})
 
 

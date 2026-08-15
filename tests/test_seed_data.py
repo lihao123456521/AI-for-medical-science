@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.seed_data import audit_seed_payload, build_seed_payload, initialize_runtime_from_seed
+from core.seed_data import audit_seed_payload, build_seed_payload, initialize_runtime_from_seed, sanitize_for_external_llm
 
 
 class SeedDataTests(unittest.TestCase):
@@ -76,6 +76,28 @@ class SeedDataTests(unittest.TestCase):
 
         self.assertNotIn("影像片子汇总.pdf", text)
         self.assertNotIn("imaging-summary-617fbd6fbdd3.pdf", text)
+
+    def test_outbound_sanitizer_keeps_json_structure_and_clinical_fields(self):
+        """出站脱敏只替换身份值，不能把单行 JSON 上下文整段吞掉。"""
+        context = {
+            "conversation_mode": "initial_patient_brief",
+            "patient_input_current_chat_only": {
+                "age": 65,
+                "sex": "男",
+                "diagnosis": "尿道鳞状细胞癌",
+                "free_text": "姓名:张三；性别:男；住院号:12345678；诊断:尿道SCC",
+            },
+        }
+        text = json.dumps(context, ensure_ascii=False)
+        out = sanitize_for_external_llm(text)
+
+        self.assertIn("尿道鳞状细胞癌", out)
+        self.assertIn("尿道SCC", out)
+        self.assertIn("65", out)
+        self.assertNotIn("张三", out)
+        self.assertNotIn("12345678", out)
+        parsed = json.loads(out)
+        self.assertEqual(parsed["conversation_mode"], "initial_patient_brief")
 
     def test_initialize_only_populates_empty_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

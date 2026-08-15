@@ -16,8 +16,11 @@ ARTICLE_FIELDS = (
     "title", "authors", "journal", "year", "doi", "source_url", "keywords", "abstract", "content", "notes",
 )
 
-IDENTITY_LINE_RE = re.compile(
-    r"(?im)^.*?(?:姓名|患者姓名|住院号|病案号|身份证号|身份证|联系电话|手机号|家庭住址|地址)\s*[：:]\s*[^\r\n]*$"
+# 只替换"标签:值"中的值部分。此前版本按整行替换，但出站上下文是单行 JSON，
+# 整行匹配会把整份病例上下文吞成一个占位符，导致模型收不到任何病例信息。
+IDENTITY_VALUE_RE = re.compile(
+    r"(患者姓名|姓名|住院号|病案号|身份证号|身份证|联系电话|手机号|家庭住址|地址)"
+    r"\s*[：:]\s*[^\r\n，。；;,\"]{0,80}"
 )
 WINDOWS_PATH_RE = re.compile(r"[A-Za-z]:\\(?:[^\s，。；;]+\\)*[^\s，。；;]*")
 API_KEY_RE = re.compile(r"\b(?:sk|sk-proj|sk-ant|key)-[A-Za-z0-9_-]{12,}\b", re.I)
@@ -33,7 +36,7 @@ def _sanitize_text(value: Any, identity_values: list[str] | None = None) -> str:
     for identity in identity_values or []:
         if identity:
             text = text.replace(identity, "[已脱敏]")
-    text = IDENTITY_LINE_RE.sub("[身份信息已脱敏]", text)
+    text = IDENTITY_VALUE_RE.sub(r"\1:[身份信息已脱敏]", text)
     text = LABELED_ID_RE.sub("[身份编号已脱敏]", text)
     text = WINDOWS_PATH_RE.sub("[本机路径已移除]", text)
     text = SOURCE_FILE_RE.sub("[源文件名已移除]", text)

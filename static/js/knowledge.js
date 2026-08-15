@@ -43,7 +43,6 @@ function renderCases(cases) {
       c.other_treatment ? '其他治疗：' + c.other_treatment : '',
       c.followup ? '随访：' + c.followup : ''
     ].filter(Boolean).join('\n');
-    const editableLabel = String(c.case_id || '').startsWith('USER-');
     return `
       <article class="knowledge-case-card">
         <a href="/case/${encodeURIComponent(c.case_id)}">
@@ -55,7 +54,7 @@ function renderCases(cases) {
         </a>
         <div class="case-card-actions">
           <a class="case-open-btn" href="/case/${encodeURIComponent(c.case_id)}">查看详情</a>
-          ${editableLabel ? `<button class="case-label-btn" data-case-id="${escapeHtml(c.case_id)}" data-label="${escapeHtml(c.sheet || '')}">编辑标签</button>` : ''}
+          <button class="case-label-btn" data-case-id="${escapeHtml(c.case_id)}" data-label="${escapeHtml(c.sheet || '')}">编辑标签</button>
           <button class="case-delete-btn" data-case-id="${escapeHtml(c.case_id)}">删除病例</button>
         </div>
       </article>`;

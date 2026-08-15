@@ -44,13 +44,16 @@ const els = {
   sendBtn: document.getElementById('sendBtn'),
   newChatBtn: document.getElementById('newChatBtn'),
   addCurrentCaseBtn: document.getElementById('addCurrentCaseBtn'),
-  uploadMaterialsBtn: document.getElementById('uploadMaterialsBtn'),
   fileInput: document.getElementById('fileInput'),
   uploadStatus: document.getElementById('uploadStatus'),
   kbSummary: document.getElementById('kbSummary'),
   mobileMenuBtn: document.getElementById('mobileMenuBtn'),
   topbarCaseLabel: document.getElementById('topbarCaseLabel'),
-  privacyChipBtn: document.getElementById('privacyChipBtn'),
+  doctorAvatarBtn: document.getElementById('doctorAvatarBtn'),
+  doctorPopover: document.getElementById('doctorPopover'),
+  popoverPrivacyBtn: document.getElementById('popoverPrivacyBtn'),
+  popoverApiBtn: document.getElementById('popoverApiBtn'),
+  popoverModelText: document.getElementById('popoverModelText'),
   privacyModal: document.getElementById('privacyModal'),
   closePrivacyModal: document.getElementById('closePrivacyModal'),
   privacyOpenApi: document.getElementById('privacyOpenApi'),
@@ -62,8 +65,6 @@ const els = {
   choiceMergeCase: document.getElementById('choiceMergeCase'),
   choiceNewCase: document.getElementById('choiceNewCase'),
   closeCaseChoice: document.getElementById('closeCaseChoice'),
-  ctxCase: document.getElementById('ctxCase'),
-  ctxAttachments: document.getElementById('ctxAttachments'),
   apiKeyBtn: document.getElementById('apiKeyBtn'),
   apiModal: document.getElementById('apiModal'),
   closeApiModal: document.getElementById('closeApiModal'),
@@ -96,13 +97,6 @@ let rememberedApiHistory = [];
 let chatRequestInFlight = false;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const escapeHtml = (text) => String(text ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;').replaceAll("'",'&#039;');
-function formatSimilarity(value, percentValue) {
-  if (percentValue) return String(percentValue);
-  const n = Number(value);
-  if (!Number.isFinite(n)) return value ? String(value) : '未计算';
-  const pct = n <= 1.5 ? n * 100 : n;
-  return `${Math.max(0, Math.min(100, pct)).toFixed(0)}%`;
-}
 function normalizeBackendMessage(text) {
   const raw = String(text || '');
   const low = raw.trim().toLowerCase();
@@ -265,23 +259,20 @@ function updateWorkspaceContext() {
   const caseLabel = hasCase ? (chat.title || '当前病例') : '未选择';
   const attachmentCount = (chat.attachments || []).length;
   // 顶部副标题：无资料时保持中性说明；有资料时展示资料数或当前主题
+  // 病例上下文只保留这一处展示，隐私状态已并入右上头像 Popover
   if (els.topbarCaseLabel) {
     if (hasCase) els.topbarCaseLabel.textContent = `当前主题：${caseLabel}`;
     else if (attachmentCount) els.topbarCaseLabel.textContent = `已添加 ${attachmentCount} 份资料`;
     else els.topbarCaseLabel.textContent = '可以帮你理解医学资料与相关信息';
   }
-  if (els.ctxCase) els.ctxCase.textContent = `当前病例：${caseLabel}`;
-  const count = (chat.attachments || []).length;
-  if (els.ctxAttachments) {
-    els.ctxAttachments.hidden = !count;
-    els.ctxAttachments.textContent = `${count} 个附件`;
-  }
 }
 function updateModelChip() {
   const cfg = rememberedApiConfig || (rememberedApiHistory || [])[0];
+  const modelText = cfg?.model ? `${cfg.provider || '已配置'} / ${cfg.model}` : (cfg?.provider ? `${cfg.provider} / 未选模型` : '本地知识库');
   if (els.privacyModelText) {
-    els.privacyModelText.textContent = cfg?.model ? `${cfg.provider || '已配置'} / ${cfg.model}` : (cfg?.provider ? `${cfg.provider} / 未选模型` : '本地知识库（未配置 API Key 时使用本地知识库兜底回答）');
+    els.privacyModelText.textContent = cfg?.model ? modelText : '本地知识库（未配置 API Key 时使用本地知识库兜底回答）';
   }
+  if (els.popoverModelText) els.popoverModelText.textContent = modelText;
   if (els.privacyImageText) {
     if (cfg?.provider) {
       els.privacyImageText.textContent = `图片将发送至 ${cfg.provider}。配置了第三方模型后，讨论中携带的图片会作为多模态输入发送给该模型；未配置时图片仅在本地处理。`;
@@ -290,20 +281,39 @@ function updateModelChip() {
     }
   }
 }
+const TYPING_DOTS_HTML = '<span class="typing-dots" aria-label="正在输入"><i></i><i></i><i></i></span>';
+const DOCTOR_AVATAR_URL = '/static/assets/mascot_fixed.png';
 function renderMessage(msg) {
   const row = document.createElement('div');
   row.className = `message-row ${msg.role === 'user' ? 'user' : 'assistant'}`;
   row.dataset.msgId = msg.id;
+  const column = document.createElement('div');
+  column.className = 'message-column';
+  if (msg.role === 'assistant') {
+    const avatar = document.createElement('img');
+    avatar.className = 'message-avatar';
+    avatar.src = DOCTOR_AVATAR_URL;
+    avatar.alt = 'UroPUC AI 医生助手头像';
+    row.appendChild(avatar);
+    const meta = document.createElement('div');
+    meta.className = 'message-meta';
+    meta.textContent = 'UroPUC AI 医生助手';
+    column.appendChild(meta);
+  }
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   const content = document.createElement('div');
-  content.innerHTML = msg.role === 'assistant' ? renderAssistantText(msg.content || '') : escapeHtml(msg.content || '').replace(/\n/g, '<br>');
+  content.className = 'message-content';
+  content.innerHTML = msg.role === 'assistant'
+    ? ((msg.content || '').trim() ? renderAssistantText(msg.content) : TYPING_DOTS_HTML)
+    : escapeHtml(msg.content || '').replace(/\n/g, '<br>');
   bubble.appendChild(content);
   if (msg.attachments?.length) bubble.appendChild(renderAttachments(msg.attachments));
   if (msg.report?.display_evidence_cards !== false && msg.report?.similar_cases?.length) bubble.appendChild(renderCaseLinks(msg.report.similar_cases));
   if (msg.candidates?.length) bubble.appendChild(renderCandidateLinks(msg.candidates));
   if (msg.report?.display_evidence_cards !== false && msg.report?.related_articles?.length) bubble.appendChild(renderArticleLinks(msg.report.related_articles));
-  row.appendChild(bubble); els.chatThread.appendChild(row);
+  column.appendChild(bubble);
+  row.appendChild(column); els.chatThread.appendChild(row);
 }
 function renderAttachments(files) {
   const wrap = document.createElement('div'); wrap.className = 'attachment-list';
@@ -320,8 +330,9 @@ function renderCaseLinks(cases) {
   for (const c of cases.slice(0, 4)) {
     const a = document.createElement('a');
     a.className = 'case-link-card'; a.href = `/case/${encodeURIComponent(c.case_id)}`; a.target = '_blank';
+    // 不再展示"相似度 XX%"，改用主要匹配点/差异点描述，避免把启发式结果当成医学概率
     const ev = (c.evidence_summary || []).slice(0, 2).join('；');
-    a.innerHTML = `<b>${escapeHtml(c.case_id)}｜${escapeHtml(c.sheet)}｜相似度 ${escapeHtml(formatSimilarity(c.similarity, c.similarity_percent))}</b><small>${escapeHtml(c.diagnosis || '诊断未记录')}</small><small>${escapeHtml(ev || '点击查看病例详情')}</small>`;
+    a.innerHTML = `<b>${escapeHtml(c.case_id)}｜${escapeHtml(c.sheet)}</b><small>${escapeHtml(c.diagnosis || '诊断未记录')}</small><small>主要匹配点：${escapeHtml(ev || '点击查看病例详情')}</small>`;
     wrap.appendChild(a);
   }
   return wrap;
@@ -339,8 +350,9 @@ function renderCandidateLinks(candidates) {
     card.className = `case-link-card candidate-link-card selectable-candidate ${selected ? 'selected' : ''}`;
     const info = [c.age ? `${c.age}岁` : '', c.sex, c.diagnosis, c.tnm].filter(Boolean).join('｜');
     const desc = [c.history, c.symptoms, c.pathology, c.surgery].filter(Boolean).join('；').slice(0, 120);
-    const btnText = selected ? '✓ 已选择' : '选择该患者';
-    card.innerHTML = `<div class="candidate-card-main"><b>${escapeHtml(c.display_title || c.candidate_id || '候选病例')}</b><small>${escapeHtml(info || '基础信息待确认')}｜匹配度 ${escapeHtml(c.match_score || '')}</small><small>${escapeHtml(desc || '该行病例信息待医生确认')}</small></div><button type="button" class="candidate-confirm-btn">${btnText}</button>`;
+    const btnText = selected ? '✓ 当前病例' : '选择该患者';
+    // 匹配度分数不作为患者可见主信息，改为展示"匹配依据"（年龄/性别/诊断/TNM）
+    card.innerHTML = `<div class="candidate-card-main"><b>${escapeHtml(c.display_title || c.candidate_id || '候选病例')}</b><small>${info ? `匹配依据：${escapeHtml(info)}` : '匹配依据：基础信息待确认'}</small><small>${escapeHtml(desc || '请确认是否为你要查看的患者/病例')}</small></div><button type="button" class="candidate-confirm-btn">${btnText}</button>`;
     const btn = card.querySelector('.candidate-confirm-btn');
     btn.addEventListener('click', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -372,6 +384,9 @@ function selectCandidateInChat(c) {
   applyCandidateToChat(chat, c);
 }
 function applyCandidateToChat(chat, c) {
+  // 同一候选只触发一次自动简要分析；重复点击/重新渲染不再重复生成
+  if (chat.selectedCandidateId === c.candidate_id && chat.briefGeneratedFor === c.candidate_id) return;
+  const firstSelect = chat.selectedCandidateId !== c.candidate_id;
   chat.selectedCandidateId = c.candidate_id || '';
   const merged = { ...(chat.patient || {}) };
   for (const k of ['name','sex','age','diagnosis','ls','tnm','lymph_node','history','symptoms','tumor','imaging','pathology','surgery','other_treatment','followup','free_text']) {
@@ -383,24 +398,33 @@ function applyCandidateToChat(chat, c) {
   saveChats();
   renderHistory();
   renderChat();
-  if (chat.id === state.activeId) analyzeSelectedCandidate(c);
+  if (firstSelect || chat.briefGeneratedFor !== c.candidate_id) {
+    chat.briefGeneratedFor = c.candidate_id;
+    if (chat.id === state.activeId) analyzeSelectedCandidate(c);
+  }
 }
 
 async function analyzeSelectedCandidate(c) {
   const chat = currentChat();
-  const typing = addMessage('assistant', '已选择该患者，正在检索病例、文献并生成初步分析……');
+  const typing = addMessage('assistant', '', { kind: 'initial_case_brief' });
   try {
     await streamChat('/api/chat/stream', {
-      question: '请基于医生已选择的患者进行总体分析，检索相似病例和可参考文献，并给出下一步讨论方向。',
-      mode: 'initial_patient_analysis',
+      question:
+        '请基于刚选择的患者做一份简短初步整理。' +
+        '只输出四部分：1) 资料概览（年龄/性别、主要诊断或症状、已提供的检查/病理/影像）；' +
+        '2) 主要关注点（最多3条，只指出值得关注的信息，不下诊断或治疗指令）；' +
+        '3) 还缺什么信息（没有缺项则不硬凑）；' +
+        '4) 下一步可以问什么（2-3个可继续提问方向）。' +
+        '不要主动展开治疗方案，也不要检索病例库和文献库。',
+      mode: 'initial_patient_brief',
       patient: chat.patient || {},
       has_confirmed_case: true,
-      history: chat.messages.slice(-18).map(m => ({ role: m.role, content: m.content })),
+      history: [],
       attachments: chat.attachments || [],
       ...apiPayloadExtras(),
     }, typing.id);
   } catch (err) {
-    replaceMessage(typing.id, { content: `分析失败：${err.message}` });
+    replaceMessage(typing.id, { content: `初步整理失败：${err.message}` });
   }
 }
 
@@ -443,7 +467,8 @@ function scrollToBottom() { requestAnimationFrame(() => { els.chatWindow.scrollT
 function updateStreamingBubble(id, text) {
   const row = document.querySelector(`[data-msg-id="${id}"]`);
   if (!row) return;
-  const contentDiv = row.querySelector('.message-bubble > div:first-child');
+  // 结构化定位 message-content，加入头像/列结构后不依赖 first-child 位置
+  const contentDiv = row.querySelector('.message-bubble > .message-content');
   if (contentDiv) {
     contentDiv.innerHTML = renderAssistantText(text);
     scrollToBottom();
@@ -564,7 +589,7 @@ async function sendMessage() {
   els.input.value = ''; resizeInput(); updatePatientFromExplicitText(text);
   const chat = currentChat();
   addMessage('user', text);
-  const typing = addMessage('assistant', '正在生成回答……');
+  const typing = addMessage('assistant', '');
   els.sendBtn.disabled = true;
   try {
     await streamChat('/api/chat/stream', {
@@ -1030,8 +1055,32 @@ els.newChatBtn.addEventListener('click', () => {
   els.input.focus();
 });
 els.addCurrentCaseBtn.addEventListener('click', addCurrentCase);
-els.uploadMaterialsBtn?.addEventListener('click', () => els.fileInput.click());
-els.privacyChipBtn?.addEventListener('click', () => { els.privacyModal.hidden = false; });
+// 右上 AI 医生头像：打开/关闭轻量 Popover，隐私与数据、模型设置入口收纳于此
+function setPopover(open) {
+  if (!els.doctorPopover) return;
+  els.doctorPopover.hidden = !open;
+  if (els.doctorAvatarBtn) els.doctorAvatarBtn.setAttribute('aria-expanded', String(open));
+}
+els.doctorAvatarBtn?.addEventListener('click', e => {
+  e.stopPropagation();
+  setPopover(!els.doctorPopover || els.doctorPopover.hidden);
+});
+els.popoverPrivacyBtn?.addEventListener('click', () => { setPopover(false); els.privacyModal.hidden = false; });
+els.popoverApiBtn?.addEventListener('click', () => { setPopover(false); openApiModal(); });
+document.addEventListener('click', e => {
+  if (!els.doctorPopover || els.doctorPopover.hidden) return;
+  if (e.target instanceof Node && els.doctorPopover.contains(e.target)) return;
+  if (e.target instanceof Node && els.doctorAvatarBtn?.contains(e.target)) return;
+  setPopover(false);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setPopover(false); });
+// 聊天区支持直接拖入文件上传，复用现有 uploadFile，不新建第二套上传 API
+['dragover', 'dragenter'].forEach(evt => els.chatWindow.addEventListener(evt, e => { e.preventDefault(); }));
+els.chatWindow.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer?.files?.[0];
+  if (file) uploadFile(file);
+});
 els.closePrivacyModal?.addEventListener('click', () => { els.privacyModal.hidden = true; });
 els.privacyModal?.addEventListener('click', e => { if (e.target === els.privacyModal) els.privacyModal.hidden = true; });
 els.privacyOpenApi?.addEventListener('click', () => { els.privacyModal.hidden = true; openApiModal(); });

@@ -95,6 +95,10 @@ def classify_chat_request(
     if mode == "initial_patient_analysis" and has_confirmed_case:
         return ChatRoute(True, True, "initial_patient_analysis", True)
 
+    # 选择患者后的轻量摘要：只带病例上下文，不触发相似病例/文献检索
+    if mode == "initial_patient_brief" and has_confirmed_case:
+        return ChatRoute(True, False, "initial_patient_brief", False)
+
     explicit_retrieval = any(term.lower() in q.lower() for term in EXPLICIT_RETRIEVAL_TERMS)
     if explicit_retrieval and has_confirmed_case:
         return ChatRoute(True, True, "explicit_retrieval", True)

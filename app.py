@@ -31,7 +31,7 @@ from core.seed_data import initialize_runtime_from_seed
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
-APP_BUILD_ID = "2026.08.15-v40"
+APP_BUILD_ID = "2026.08.15-v41"
 DATA_PATH = Path(os.getenv("DATA_PATH", "data/knowledge_base.xlsx"))
 if not DATA_PATH.is_absolute():
     DATA_PATH = BASE_DIR / DATA_PATH
@@ -48,6 +48,7 @@ CANDIDATE_BATCH_DIR = PERSISTENT_DATA_DIR / "candidate_batches"
 CANDIDATE_BATCH_DIR.mkdir(parents=True, exist_ok=True)
 USER_CASES_PATH = PERSISTENT_DATA_DIR / "user_cases.json"
 CASE_LABEL_OVERRIDES_PATH = PERSISTENT_DATA_DIR / "case_label_overrides.json"
+CHAT_HISTORY_PATH = PERSISTENT_DATA_DIR / "chat_history.json"
 DELETED_CASES_PATH = PERSISTENT_DATA_DIR / "deleted_cases.json"
 ARTICLES_PATH = PERSISTENT_DATA_DIR / "articles.json"
 CASE_TAGS_PATH = PERSISTENT_DATA_DIR / "case_tags.json"
@@ -85,6 +86,7 @@ ARTICLE_EXTENSIONS = {".txt", ".docx", ".pdf", ".xlsx", ".xls", ".csv", ".md"}
 ALL_UPLOAD_EXTENSIONS = IMAGE_EXTENSIONS | CASE_TABLE_EXTENSIONS
 MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "50"))
 MAX_TEXT_CHARS_PER_FILE = int(os.getenv("MAX_TEXT_CHARS_PER_FILE", "500000"))
+MAX_CHAT_HISTORY_BYTES = int(os.getenv("MAX_CHAT_HISTORY_MB", "5")) * 1024 * 1024
 
 kb = KnowledgeBase(DATA_PATH)
 
@@ -444,6 +446,29 @@ def _atomic_write_json(path: Path, data: Any) -> None:
     tmp.replace(path)
 
 
+def _normalize_chat_history(payload: Any) -> Dict[str, Any]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("chats"), list):
+        raise ValueError("聊天历史格式错误。")
+    chats: List[Dict[str, Any]] = []
+    for raw_chat in payload["chats"][:50]:
+        if not isinstance(raw_chat, dict):
+            continue
+        chat = _json_safe(raw_chat)
+        chat["messages"] = [
+            _json_safe(item) for item in (raw_chat.get("messages") or [])[-80:] if isinstance(item, dict)
+        ]
+        chat["attachments"] = [
+            _json_safe(item) for item in (raw_chat.get("attachments") or [])[-20:] if isinstance(item, dict)
+        ]
+        chat["patient"] = _json_safe(raw_chat.get("patient") or {}) if isinstance(raw_chat.get("patient") or {}, dict) else {}
+        chats.append(chat)
+    history = {"chats": chats, "activeId": str(payload.get("activeId") or "")[:200]}
+    encoded = json.dumps(history, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > MAX_CHAT_HISTORY_BYTES:
+        raise ValueError(f"聊天历史超过 {MAX_CHAT_HISTORY_BYTES // 1024 // 1024}MB 限制。")
+    return history
+
+
 def _read_json_with_backup(path: Path, default: Any = None) -> Any:
     """Read the main JSON file first and use its backup only if needed.
 
@@ -790,6 +815,7 @@ def _write_storage_manifest() -> None:
         "article_count": article_count,
         "articles_deleted_marker": ARTICLES_DELETED_MARKER.exists(),
         "deleted_cases_path": str(DELETED_CASES_PATH),
+        "chat_history_path": str(CHAT_HISTORY_PATH),
         "uploads_path": str(UPLOAD_DIR),
         "persistence_repair_log_path": str(PERSISTENCE_REPAIR_LOG_PATH),
     })
@@ -2359,6 +2385,29 @@ def api_llm_test():
     status = 200 if result.get("ok") else 400
     return jsonify(result), status
 
+
+@app.get("/api/chat/history")
+def api_chat_history_get():
+    history = _read_json_with_backup(CHAT_HISTORY_PATH, {"chats": [], "activeId": ""})
+    try:
+        normalized = _normalize_chat_history(history)
+    except ValueError:
+        normalized = {"chats": [], "activeId": ""}
+    return jsonify({"ok": True, "history": normalized})
+
+
+@app.put("/api/chat/history")
+def api_chat_history_put():
+    if request.content_length and request.content_length > MAX_CHAT_HISTORY_BYTES + 64 * 1024:
+        return jsonify({"ok": False, "error": "聊天历史文件过大。"}), 413
+    payload = request.get_json(force=True, silent=True)
+    try:
+        history = _normalize_chat_history(payload)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _atomic_write_json(CHAT_HISTORY_PATH, history)
+    return jsonify({"ok": True, "history": history, "message": "聊天历史已保存到本机运行目录。"})
+
 @app.post("/api/chat")
 def api_chat():
     payload = request.get_json(force=True, silent=True) or {}
@@ -2580,6 +2629,7 @@ def api_export():
         ("articles.json", ARTICLES_PATH),
         ("case_tags.json", CASE_TAGS_PATH),
         ("case_label_overrides.json", CASE_LABEL_OVERRIDES_PATH),
+        ("chat_history.json", CHAT_HISTORY_PATH),
         ("deleted_cases.json", DELETED_CASES_PATH),
         ("migration_state.json", MIGRATION_STATE_PATH),
     ]

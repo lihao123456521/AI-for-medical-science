@@ -30,7 +30,7 @@ try {
     $bundle = Get-ChildItem (Join-Path $ProjectRoot "$DistPath/UroPUCBackend") -Recurse -File
     $seedDir = (Join-Path $ProjectRoot "$DistPath/UroPUCBackend/_internal/data/seed").Replace('/', [IO.Path]::DirectorySeparatorChar)
     $privateHits = $bundle | Where-Object {
-        $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json", "case_label_overrides.json") -or
+        $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json", "case_label_overrides.json", "chat_history.json") -or
         ($_.Name -in @("user_cases.json", "articles.json") -and -not $_.FullName.StartsWith($seedDir))
     }
     if ($privateHits) {

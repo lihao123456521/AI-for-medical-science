@@ -20,6 +20,12 @@
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
           <span class="detail-badge" id="caseGroupLabel">{{ case.sheet }}</span>
           <button class="case-open-btn" id="editLabelBtn">编辑知识库标签</button>
+          <span class="detail-label-editor" id="caseLabelEditor" hidden>
+            <input id="caseLabelInput" type="text" maxlength="40" aria-label="知识库标签" />
+            <button class="case-open-btn" id="saveCaseLabelBtn" type="button">保存</button>
+            <button class="case-label-cancel" id="cancelCaseLabelBtn" type="button">取消</button>
+            <small class="case-label-status" id="caseLabelStatus"></small>
+          </span>
           <button class="case-delete-btn" id="deleteCaseBtn">删除病例</button>
         </div>
       </div>
@@ -76,17 +82,41 @@
   <script>
     const caseId = {{ case.case_id|tojson }};
     const editLabelBtn = document.getElementById('editLabelBtn');
+    const caseLabelEditor = document.getElementById('caseLabelEditor');
+    const caseLabelInput = document.getElementById('caseLabelInput');
+    const caseLabelStatus = document.getElementById('caseLabelStatus');
+    const closeLabelEditor = () => {
+      caseLabelEditor.hidden = true;
+      editLabelBtn.hidden = false;
+      caseLabelStatus.textContent = '';
+    };
     if (editLabelBtn) {
-      editLabelBtn.addEventListener('click', async () => {
-        const oldLabel = {{ case.sheet|tojson }};
-        const input = prompt(`编辑病例 ${caseId} 的自定义标签：`, oldLabel);
-        if (input === null) return;
-        const label = input.trim();
-        if (!label) { alert('标签不能为空。'); return; }
-        const res = await fetch(`/api/case/${encodeURIComponent(caseId)}/label`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({label})});
-        const data = await res.json();
-        if (!res.ok || !data.ok) { alert(data.error || '标签保存失败'); return; }
-        document.getElementById('caseGroupLabel').textContent = label;
+      editLabelBtn.addEventListener('click', () => {
+        caseLabelInput.value = document.getElementById('caseGroupLabel').textContent.trim();
+        editLabelBtn.hidden = true;
+        caseLabelEditor.hidden = false;
+        caseLabelInput.focus();
+        caseLabelInput.select();
+      });
+      document.getElementById('saveCaseLabelBtn').addEventListener('click', async () => {
+        const label = caseLabelInput.value.trim();
+        if (!label) { caseLabelStatus.textContent = '标签不能为空。'; caseLabelInput.focus(); return; }
+        caseLabelStatus.textContent = '保存中…';
+        try {
+          const res = await fetch(`/api/case/${encodeURIComponent(caseId)}/label`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({label})});
+          const data = await res.json();
+          if (!res.ok || !data.ok) throw new Error(data.error || '标签保存失败');
+          document.getElementById('caseGroupLabel').textContent = label;
+          closeLabelEditor();
+        } catch (err) {
+          caseLabelStatus.textContent = `保存失败：${err.message}`;
+          caseLabelInput.focus();
+        }
+      });
+      document.getElementById('cancelCaseLabelBtn').addEventListener('click', closeLabelEditor);
+      caseLabelInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); document.getElementById('saveCaseLabelBtn').click(); }
+        if (event.key === 'Escape') { event.preventDefault(); closeLabelEditor(); }
       });
     }
 

@@ -1,7 +1,7 @@
 {
   "name": "uropuc-desktop",
   "productName": "UroPUC",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "UroPUC desktop app: Electron shell around the local Flask backend.",
   "main": "desktop/main.cjs",

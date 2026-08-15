@@ -103,7 +103,7 @@ jobs:
           # 安装包内不得出现私密数据
           $resources = "dist/desktop/win-unpacked/resources"
           $privateHits = Get-ChildItem $resources -Recurse -File |
-            Where-Object { $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json", "case_label_overrides.json") }
+            Where-Object { $_.Name -in @("api_config.json", "api_config_history.json", ".env", "deleted_cases.json", "case_label_overrides.json", "chat_history.json") }
           if ($privateHits) {
             throw "Private data leaked into installer: $($privateHits.FullName -join ', ')"
           }

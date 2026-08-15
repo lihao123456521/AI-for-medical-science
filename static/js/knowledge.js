@@ -80,23 +80,66 @@ async function loadCases() {
 
 
 
-async function editCaseLabel(event) {
+async function saveCaseLabel(caseId, label) {
+  const res = await fetch(`/api/case/${encodeURIComponent(caseId)}/label`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.error || '标签保存失败');
+  return data;
+}
+
+function editCaseLabel(event) {
   event.preventDefault(); event.stopPropagation();
-  const caseId = event.currentTarget.dataset.caseId;
-  const oldLabel = event.currentTarget.dataset.label || '用户新增';
-  const input = prompt(`编辑病例 ${caseId} 的自定义标签：`, oldLabel);
-  if (input === null) return;
-  const label = input.trim();
-  if (!label) { alert('标签不能为空。'); return; }
-  try {
-    const res = await fetch(`/api/case/${encodeURIComponent(caseId)}/label`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ label }) });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || '标签保存失败');
-    await loadGroups();
-    await loadCases();
-  } catch (err) {
-    alert(`标签保存失败：${err.message}`);
-  }
+  const button = event.currentTarget;
+  const actions = button.closest('.case-card-actions');
+  if (!actions || actions.querySelector('.case-label-editor')) return;
+  const caseId = button.dataset.caseId;
+  const editor = document.createElement('span');
+  editor.className = 'case-label-editor';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 40;
+  input.value = button.dataset.label || '用户新增';
+  input.setAttribute('aria-label', `病例 ${caseId} 的知识库标签`);
+  const save = document.createElement('button');
+  save.type = 'button'; save.className = 'case-label-save'; save.textContent = '保存';
+  const cancel = document.createElement('button');
+  cancel.type = 'button'; cancel.className = 'case-label-cancel'; cancel.textContent = '取消';
+  const status = document.createElement('small');
+  status.className = 'case-label-status';
+  editor.append(input, save, cancel, status);
+  actions.appendChild(editor);
+  button.hidden = true;
+
+  const close = () => { editor.remove(); button.hidden = false; };
+  const submit = async () => {
+    const label = input.value.trim();
+    if (!label) { status.textContent = '标签不能为空。'; input.focus(); return; }
+    input.disabled = true; save.disabled = true; cancel.disabled = true;
+    status.textContent = '保存中…';
+    try {
+      await saveCaseLabel(caseId, label);
+      button.dataset.label = label;
+      const visible = button.closest('.knowledge-case-card')?.querySelector('.case-group-label');
+      if (visible) visible.textContent = label;
+      close();
+      await loadGroups();
+    } catch (err) {
+      input.disabled = false; save.disabled = false; cancel.disabled = false;
+      status.textContent = `保存失败：${err.message}`;
+      input.focus();
+    }
+  };
+  save.addEventListener('click', submit);
+  cancel.addEventListener('click', close);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  input.focus(); input.select();
 }
 
 async function deleteCase(event) {

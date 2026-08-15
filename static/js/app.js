@@ -95,6 +95,9 @@ let state = { chats: [], activeId: null };
 let rememberedApiConfig = null;
 let rememberedApiHistory = [];
 let chatRequestInFlight = false;
+let chatBackendReady = false;
+let chatBackendSaveTimer = null;
+let loadedLocalChatHistory = false;
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const escapeHtml = (text) => String(text ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;').replaceAll("'",'&#039;');
 function normalizeBackendMessage(text) {
@@ -136,20 +139,67 @@ function createChat(activate = true) {
   saveChats(); renderHistory(); renderChat();
   return chat;
 }
-function saveChats() {
+function chatHistoryPayload() {
   const slim = state.chats.slice(0, 50).map(c => ({ ...c, messages: (c.messages || []).slice(-80), attachments: c.attachments || [], patient: c.patient || {} }));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ chats: slim, activeId: state.activeId }));
+  return { chats: slim, activeId: state.activeId };
+}
+function historyLatestUpdate(payload) {
+  return Math.max(0, ...(payload?.chats || []).map(chat => Number(chat?.updatedAt || chat?.createdAt || 0)));
+}
+async function persistChatsToBackend(payload = chatHistoryPayload()) {
+  const res = await fetch('/api/chat/history', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) throw new Error(data.error || '聊天历史保存失败');
+}
+function scheduleBackendChatSave() {
+  if (!chatBackendReady) return;
+  clearTimeout(chatBackendSaveTimer);
+  chatBackendSaveTimer = setTimeout(() => {
+    persistChatsToBackend().catch(() => {});
+  }, 300);
+}
+function saveChats() {
+  const payload = chatHistoryPayload();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  scheduleBackendChatSave();
 }
 function loadChats() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('uscc_chat_history_v33') || localStorage.getItem('uscc_chat_history_v32') || localStorage.getItem('uscc_chat_history_v31') || localStorage.getItem('uscc_chat_history_v30') || localStorage.getItem('uscc_chat_history_v29') || localStorage.getItem('uscc_chat_history_v19') || localStorage.getItem('uscc_chat_history_v18') || localStorage.getItem('uscc_chat_history_v17') || localStorage.getItem('uscc_chat_history_v16') || localStorage.getItem('uscc_chat_history_v15') || localStorage.getItem('uscc_chat_history_v14') || localStorage.getItem('uscc_chat_history_v13') || localStorage.getItem('uscc_chat_history_v12') || localStorage.getItem('uscc_chat_history_v11') || localStorage.getItem('uscc_chat_history_v10') || localStorage.getItem('uscc_chat_history_v9') || localStorage.getItem('uscc_chat_history_v8') || localStorage.getItem('uscc_chat_history_v7') || localStorage.getItem('uscc_chat_history_v6') || localStorage.getItem('uscc_chat_history_v5') || localStorage.getItem('uscc_chat_history_v4') || localStorage.getItem('uscc_chat_history_v3') || localStorage.getItem('uscc_chat_history_v2');
     if (raw) {
+      loadedLocalChatHistory = true;
       const parsed = JSON.parse(raw);
       state.chats = Array.isArray(parsed.chats) ? parsed.chats.map(c => ({ attachments: [], patient: {}, caseConfirmed: false, ...c })) : [];
       state.activeId = parsed.activeId || state.chats[0]?.id || null;
     }
   } catch (_) {}
   if (!state.chats.length) createChat(true);
+}
+async function syncChatsWithBackend() {
+  const localPayload = chatHistoryPayload();
+  try {
+    const res = await fetch('/api/chat/history', { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '聊天历史读取失败');
+    const remotePayload = data.history || { chats: [], activeId: '' };
+    if ((remotePayload.chats || []).length && (!loadedLocalChatHistory || historyLatestUpdate(remotePayload) >= historyLatestUpdate(localPayload))) {
+      state.chats = remotePayload.chats.map(chat => ({ attachments: [], patient: {}, caseConfirmed: false, ...chat }));
+      state.activeId = remotePayload.activeId || state.chats[0]?.id || null;
+    }
+    const selectedPayload = chatHistoryPayload();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedPayload));
+    chatBackendReady = true;
+    await persistChatsToBackend(selectedPayload);
+  } catch (_) {
+    chatBackendReady = true;
+    scheduleBackendChatSave();
+  }
+  renderHistory();
+  renderChat();
 }
 function deleteChat(id) {
   const chat = state.chats.find(c => c.id === id);
@@ -331,7 +381,7 @@ function renderAttachments(files) {
 function renderCaseLinks(cases) {
   const wrap = document.createElement('div'); wrap.className = 'case-links';
   const title = document.createElement('div'); title.className = 'case-links-title'; title.textContent = '相似病例与治疗转归'; wrap.appendChild(title);
-  for (const c of cases.slice(0, 4)) {
+  for (const c of cases.slice(0, 3)) {
     const a = document.createElement('a');
     a.className = 'case-link-card'; a.href = `/case/${encodeURIComponent(c.case_id)}`; a.target = '_blank';
     // 不再展示"相似度 XX%"，改用主要匹配点/差异点描述，避免把启发式结果当成医学概率
@@ -414,13 +464,11 @@ async function analyzeSelectedCandidate(c) {
   try {
     await streamChat('/api/chat/stream', {
       question:
-        '请基于刚选择的患者做一份简短初步整理。' +
-        '只输出四部分：1) 资料概览（年龄/性别、主要诊断或症状、已提供的检查/病理/影像）；' +
-        '2) 主要关注点（最多3条，只指出值得关注的信息，不下诊断或治疗指令）；' +
-        '3) 还缺什么信息（没有缺项则不硬凑）；' +
-        '4) 下一步可以问什么（2-3个可继续提问方向）。' +
-        '不要主动展开治疗方案，也不要检索病例库和文献库。',
-      mode: 'initial_patient_brief',
+        '请基于刚选择的患者，直接给出支持后续病例讨论的初步分析。' +
+        '先概括当前病例最关键的信息和仍需核对的缺项；' +
+        '再结合本地数据库中最有参考价值的相似病例和相关文章，各不超过3条，说明主要匹配点、差异点和可借鉴证据。' +
+        '内容要贴合该患者现有资料，不机械套模板，不编造诊断，不给出未经医生判断的治疗指令。',
+      mode: 'initial_patient_analysis',
       patient: chat.patient || {},
       has_confirmed_case: true,
       history: [],
@@ -439,7 +487,7 @@ async function analyzeSelectedCandidate(c) {
 function renderArticleLinks(articles) {
   const wrap = document.createElement('div'); wrap.className = 'case-links article-links';
   const title = document.createElement('div'); title.className = 'case-links-title'; title.textContent = '可参考文献'; wrap.appendChild(title);
-  for (const a of (articles || []).slice(0, 4)) {
+  for (const a of (articles || []).slice(0, 3)) {
     const link = a.article_url || (a.article_id ? `/article/${encodeURIComponent(a.article_id)}` : (a.source_url || '#'));
     const card = document.createElement('a');
     card.className = 'case-link-card article-link-card'; card.href = link; card.target = '_blank';
@@ -1141,4 +1189,4 @@ els.saveFontConfig?.addEventListener('click', saveFontSettings);
 document.querySelectorAll('[data-prompt]').forEach(btn => btn.addEventListener('click', () => { els.input.value = btn.dataset.prompt; resizeInput(); els.input.focus(); }));
 
 localStorage.removeItem(API_KEY_STORAGE);
-applyFontSettings(); loadMascot(); fetchRememberedApiConfig(); loadChats(); renderHistory(); renderChat(); loadSummary(); resizeInput();
+applyFontSettings(); loadMascot(); fetchRememberedApiConfig(); loadChats(); renderHistory(); renderChat(); syncChatsWithBackend(); loadSummary(); resizeInput();

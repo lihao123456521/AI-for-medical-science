@@ -6,7 +6,7 @@
   <link rel="icon" href="{{ url_for('favicon') }}" />
   <link rel="shortcut icon" href="{{ url_for('favicon') }}" />
   <title>UroPUC · 尿道健康智能助手</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=chatui36" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=aidoctor1" />
 </head>
 <body>
   <main class="app-shell">
@@ -23,7 +23,6 @@
         <div class="nav-section">
           <div class="nav-section-title">开始使用</div>
           <button class="nav-item nav-item-primary" id="newChatBtn">＋ 新对话</button>
-          <button class="nav-item" id="uploadMaterialsBtn">上传 / 添加资料</button>
         </div>
         <div class="nav-section">
           <div class="nav-section-title">资料</div>
@@ -60,21 +59,38 @@
           <h2>UroPUC</h2>
           <p id="topbarCaseLabel">可以帮你理解医学资料与相关信息</p>
         </div>
-        <div class="topbar-chips">
-          <button class="chip chip-btn" id="privacyChipBtn" title="查看数据存储、文本脱敏与图片外发状态">隐私与数据</button>
+        <div class="topbar-avatar">
+          <button class="avatar-btn" id="doctorAvatarBtn" aria-haspopup="true" aria-expanded="false" title="UroPUC AI 医生助手" aria-label="打开助手菜单">
+            <img src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC AI 医生助手" />
+            <span class="avatar-dot" aria-hidden="true"></span>
+          </button>
+          <div class="avatar-popover" id="doctorPopover" hidden>
+            <div class="popover-head">
+              <img src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="" />
+              <div class="popover-head-text">
+                <b>UroPUC AI 医生助手</b>
+                <small id="popoverModelText">本地知识库</small>
+              </div>
+            </div>
+            <div class="popover-menu">
+              <button id="popoverPrivacyBtn">隐私与数据</button>
+              <button id="popoverApiBtn">模型与隐私设置</button>
+            </div>
+            <p class="popover-foot">回答仅用于信息理解与交流，不能替代医生诊断和治疗建议。</p>
+          </div>
         </div>
       </header>
 
       <div class="chat-window" id="chatWindow">
         <div class="dashboard" id="emptyState">
           <div class="main-inner welcome">
-            <div class="dash-head">
-              <div>
-                <h3>你好，我是 UroPUC</h3>
-                <p>你可以描述症状、粘贴检查 / 病理 / 病历内容，或上传资料，我会帮你整理、解释并提供可参考的信息。</p>
-              </div>
-              <div class="empty-mascot" aria-hidden="true">
-                <img class="mascot-img" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC 头像" />
+            <div class="welcome-msg">
+              <img class="message-avatar" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC AI 医生助手头像" />
+              <div class="message-column">
+                <div class="message-meta">UroPUC AI 医生助手</div>
+                <div class="message-bubble">
+                  你好，我是 UroPUC。你可以把检查、病理、病历或问题发给我，我会先帮你整理和解释。
+                </div>
               </div>
             </div>
 
@@ -92,11 +108,6 @@
 
       <footer class="composer-wrap">
         <div class="composer-inner">
-          <div class="composer-context" id="composerContext">
-            <span class="ctx-chip" id="ctxCase">当前病例：未选择</span>
-            <span class="ctx-chip" id="ctxAttachments" hidden>0 个附件</span>
-            <span class="ctx-chip ctx-success" title="发送给第三方模型前，自动去除姓名、病案号、电话、邮箱等身份标识">脱敏已开启</span>
-          </div>
           <div id="uploadStatus" class="upload-status-inline"></div>
           <div class="composer">
             <label class="attach-btn" for="fileInput" title="上传检查单、病理报告、病历或影像资料" aria-label="上传资料">＋</label>
@@ -229,6 +240,6 @@
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=chatui36"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=aidoctor1"></script>
 </body>
 </html>

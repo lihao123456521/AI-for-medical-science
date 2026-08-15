@@ -102,23 +102,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   font-size: 11px; font-weight: 600; letter-spacing: 1px;
   color: #8fa1b8; text-transform: uppercase; padding: 0 8px 4px;
 }
+/* 每个可点击小项都有独立弱框：默认深色弱背景 + 1px 内边框，hover 提亮，只有 primary/active 用蓝色 */
 .nav-item {
   display: flex; align-items: center; gap: 8px;
-  width: 100%; border: 0; border-radius: 8px;
-  color: var(--sidebar-text); background: transparent;
+  width: 100%; border: 1px solid rgba(148, 163, 184, 0.18); border-radius: 9px;
+  color: var(--sidebar-text); background: rgba(255, 255, 255, 0.035);
   padding: 9px 10px; cursor: pointer; text-align: left;
   font-size: 13.5px; font-weight: 500; text-decoration: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.nav-item:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(148, 163, 184, 0.34);
+  color: #fff;
+}
 .nav-item-col { flex-direction: column; align-items: flex-start; gap: 2px; }
 .nav-item-col span { line-height: 1.4; }
 .nav-item-col small { font-size: 11px; color: #7c8aa0; line-height: 1.4; word-break: break-all; }
-.nav-item-primary {
-  background: var(--primary); color: #fff; font-weight: 700;
-  padding: 10px; margin-bottom: 2px;
+.nav-item-primary, .nav-item.active {
+  background: var(--primary);
+  border-color: #3b82f6;
+  color: #fff;
 }
-.nav-item-primary:hover { background: var(--primary-strong); color: #fff; }
+.nav-item-primary { font-weight: 700; padding: 10px; margin-bottom: 2px; }
+.nav-item-primary:hover, .nav-item.active:hover {
+  background: var(--primary-strong); border-color: #60a5fa; color: #fff;
+}
 
 .side-footer {
   margin-top: auto;
@@ -172,7 +181,39 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .topbar-title { min-width: 0; margin-right: auto; }
 .topbar h2 { font-size: 17px; font-weight: 700; margin: 0; color: var(--text); line-height: 1.3; }
 .topbar p { font-size: 12.5px; margin: 1px 0 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* 顶部右侧：AI 医生头像 + 轻量 Popover（隐私与数据、模型设置入口收纳于此） */
+.topbar-avatar { position: relative; display: flex; align-items: center; }
+.avatar-btn {
+  position: relative; width: 38px; height: 38px; padding: 0;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--surface);
+  overflow: visible; cursor: pointer; flex: 0 0 auto;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.avatar-btn img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+.avatar-btn:hover { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.avatar-dot {
+  position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--success); border: 2px solid var(--surface);
+}
+.avatar-popover {
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60;
+  width: 280px; padding: 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: var(--shadow-lg);
+}
+.popover-head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.popover-head img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
+.popover-head-text { min-width: 0; }
+.popover-head-text b { display: block; font-size: 13.5px; color: var(--text); line-height: 1.35; }
+.popover-head-text small { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.popover-menu { display: flex; flex-direction: column; gap: 6px; padding: 10px 0 8px; }
+.popover-menu button {
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-soft);
+  border-radius: 9px; padding: 9px 12px; font-size: 13px; text-align: left; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.popover-menu button:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.popover-foot { font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.55; }
 .chip {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 12px; font-weight: 500; color: var(--text-soft);
@@ -194,19 +235,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .main-inner { max-width: var(--content-wide); margin: 0 auto; width: 100%; }
 .main-inner.welcome { max-width: 760px; padding-top: 6vh; }
 
-.dash-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 24px; padding: 8px 0 20px;
+/* 首屏欢迎：一条左侧带头像的 AI 医生欢迎消息，建立对话模型 */
+.welcome-msg {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 0 4px;
 }
-.dash-head h3 { font-size: 26px; font-weight: 700; margin: 0; color: var(--text); line-height: 1.35; }
-.dash-head p { font-size: 14px; color: var(--muted); margin: 6px 0 0; line-height: 1.7; }
-
-.empty-mascot {
-  width: 56px; height: 56px; border-radius: 14px; flex: 0 0 auto;
-  background: #fff; border: 1px solid var(--border);
-  display: grid; place-items: center; overflow: hidden;
+.welcome-msg .message-meta { margin-bottom: 4px; }
+.welcome-msg .message-bubble {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-bottom-left-radius: 6px;
+  box-shadow: var(--shadow-sm);
+  font-size: 15.5px; line-height: 1.75;
 }
-.empty-mascot img { width: 52px; height: 52px; object-fit: cover; border-radius: inherit; }
+.welcome .quick-prompts { margin: 16px 0 0 46px; }
+.welcome .welcome-safety { margin-left: 46px; }
 
 .quick-prompts { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; }
 .quick-prompts button {
@@ -227,12 +269,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .privacy-item b { font-size: 13px; color: var(--text); }
 .privacy-item span { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 
-/* 消息气泡 */
-.message-row { display: flex; margin: 12px 0; }
+/* 消息气泡：AI 医生在左（头像 + 名称 + 气泡），用户在右（蓝色气泡） */
+.message-row { display: flex; margin: 14px 0; gap: 10px; align-items: flex-start; }
 .message-row.user { justify-content: flex-end; }
 .message-row.assistant { justify-content: flex-start; }
+.message-avatar {
+  width: 34px; height: 34px; border-radius: 50%; object-fit: cover; flex: 0 0 auto;
+  border: 1px solid var(--border); background: var(--surface); margin-top: 22px;
+}
+.message-column { display: flex; flex-direction: column; min-width: 0; max-width: min(780px, 82%); }
+.message-row.user .message-column { align-items: flex-end; max-width: min(760px, 82%); }
+.message-meta { font-size: 11.5px; color: var(--muted); margin: 0 2px 4px; }
 .message-bubble {
-  max-width: min(820px, 92%);
+  max-width: 100%;
   padding: 12px 16px;
   border-radius: 14px;
   line-height: 1.7;
@@ -250,6 +299,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   box-shadow: var(--shadow-sm);
 }
 .message-bubble strong { font-weight: 700; color: inherit; }
+
+/* 流式等待：三个跳动圆点，首个 chunk 到达后被真实文字替换 */
+.typing-dots { display: inline-flex; gap: 4px; align-items: center; padding: 4px 2px; }
+.typing-dots i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+.typing-dots i:nth-child(2) { animation-delay: 0.18s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
 
 /* 消息内卡片 */
 .attachment-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -283,17 +345,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .selectable-candidate.selected .candidate-confirm-btn { border-color: #86efac; background: #dcfce7; color: #166534; }
 .candidate-confirm-btn:hover { filter: brightness(0.97); }
 
-/* 输入区：与聊天线程同宽，附带科研上下文条 */
-.composer-wrap { padding: 12px 24px 18px; background: var(--surface); border-top: 1px solid var(--border); }
+/* 输入区：与页面背景一致，仅输入框为白色卡片，避免底部出现另一色带 */
+.composer-wrap { padding: 12px 24px 18px; background: var(--bg); }
 .composer-inner { max-width: var(--content-chat); margin: 0 auto; width: 100%; }
-.composer-context { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; min-height: 20px; }
-.ctx-chip {
-  display: inline-flex; align-items: center;
-  font-size: 11.5px; color: var(--muted);
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 2px 8px; line-height: 1.5; white-space: nowrap;
-}
-.ctx-success { color: var(--success); background: var(--success-soft); border-color: #bbf7d0; }
 .upload-status-inline { font-size: 12px; color: var(--muted); min-height: 18px; margin-bottom: 6px; }
 .composer {
   display: flex; align-items: flex-end; gap: 10px;
@@ -589,13 +643,10 @@ body.modal-open { overflow: hidden; }
   .mobile-menu { display: grid; place-items: center; }
   .topbar { padding: 8px 14px; }
   .topbar h2 { font-size: 16px; }
-  .topbar-chips { display: none; }
   .chat-window { padding: 16px 12px; }
   .composer-wrap { padding: 10px 12px 14px; }
-  .composer-context .ctx-success { display: none; }
-  .message-bubble { max-width: 94%; }
-  .dash-head h3 { font-size: 20px; }
-  .dash-head { padding-top: 0; }
+  .message-column, .message-row.user .message-column { max-width: 88%; }
+  .welcome .quick-prompts, .welcome .welcome-safety { margin-left: 0; }
 
   .case-grid, .add-grid, .article-list-page, .article-grid,
   .article-search-tools, .article-search-row, .kb-tools, .kb-tools-with-danger,
@@ -613,5 +664,5 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 480px) {
   .medical-image-gallery { grid-template-columns: 1fr; }
   .quick-prompts { flex-direction: column; align-items: stretch; }
-  .dash-head .empty-mascot { display: none; }
+  .welcome .quick-prompts { margin-left: 0; }
 }

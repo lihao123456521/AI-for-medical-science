@@ -82,6 +82,25 @@ class ChatRoutingTests(unittest.TestCase):
         self.assertFalse(has_detailed_case({"free_text": "你好"}))
         self.assertTrue(classify_chat_request("分析", True, "initial_patient_analysis").retrieve_evidence)
 
+    def test_initial_brief_keeps_case_context_without_retrieval(self):
+        route = classify_chat_request("请基于刚选择的患者做一份简短初步整理。", True, "initial_patient_brief")
+
+        self.assertTrue(route.use_case_context)
+        self.assertFalse(route.retrieve_evidence)
+        self.assertFalse(route.use_article_context)
+        self.assertEqual(route.mode, "initial_patient_brief")
+
+    def test_initial_brief_ignores_retrieval_trigger_words_in_question(self):
+        route = classify_chat_request("请检索相似病例后做简短初步整理", True, "initial_patient_brief")
+
+        self.assertFalse(route.retrieve_evidence)
+
+    def test_initial_brief_without_confirmed_case_falls_back_to_routing(self):
+        route = classify_chat_request("请基于刚选择的患者做一份简短初步整理。", False, "initial_patient_brief")
+
+        self.assertFalse(route.use_case_context)
+        self.assertNotEqual(route.mode, "initial_patient_brief")
+
     def test_local_fallback_does_not_expand_similarity_for_general_treatment_question(self):
         report = {"similar_cases": [{"case_id": "CASE-1"}], "related_articles": []}
 

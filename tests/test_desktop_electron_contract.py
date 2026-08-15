@@ -147,6 +147,7 @@ class DesktopElectronContractTests(unittest.TestCase):
         # PyInstaller 后端 + electron-builder NSIS 安装包
         self.assertIn("build_backend.ps1", source)
         self.assertIn("--win nsis", source)
+        self.assertIn("--publish never", source)
         self.assertIn("UroPUC-Setup", source)
         # 旧 C# launcher 发布链路暂不删除
         self.assertIn("build_release_packages.ps1", source)

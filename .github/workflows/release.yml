@@ -86,7 +86,7 @@ jobs:
           }
 
       - name: Build Electron installer (NSIS)
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win nsis --publish never
 
       - name: Verify installer and packaged app
         shell: powershell

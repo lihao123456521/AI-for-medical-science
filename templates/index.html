@@ -6,7 +6,7 @@
   <link rel="icon" href="{{ url_for('favicon') }}" />
   <link rel="shortcut icon" href="{{ url_for('favicon') }}" />
   <title>UroPUC · 尿道健康智能助手</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=aidoctor1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=hero2" />
 </head>
 <body>
   <main class="app-shell">
@@ -55,53 +55,45 @@
     <section class="chat-layout">
       <header class="topbar">
         <button class="mobile-menu" id="mobileMenuBtn" aria-label="打开侧边菜单">☰</button>
-        <div class="topbar-title">
-          <h2>UroPUC</h2>
-          <p id="topbarCaseLabel">可以帮你理解医学资料与相关信息</p>
-        </div>
-        <div class="topbar-avatar">
-          <button class="avatar-btn" id="doctorAvatarBtn" aria-haspopup="true" aria-expanded="false" title="UroPUC AI 医生助手" aria-label="打开助手菜单">
-            <img src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC AI 医生助手" />
-            <span class="avatar-dot" aria-hidden="true"></span>
-          </button>
-          <div class="avatar-popover" id="doctorPopover" hidden>
-            <div class="popover-head">
-              <img src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="" />
-              <div class="popover-head-text">
-                <b>UroPUC AI 医生助手</b>
-                <small id="popoverModelText">本地知识库</small>
+        <div class="topbar-assistant">
+          <div class="topbar-avatar">
+            <button class="avatar-btn" id="doctorAvatarBtn" aria-haspopup="true" aria-expanded="false" title="UroPUC AI 医学助手" aria-label="打开助手菜单">
+              <img src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC AI 医学助手" />
+              <span class="avatar-dot" aria-hidden="true"></span>
+            </button>
+            <div class="avatar-popover" id="doctorPopover" hidden>
+              <div class="popover-head">
+                <img src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="" />
+                <div class="popover-head-text">
+                  <b>UroPUC AI 医学助手</b>
+                  <small id="popoverModelText">本地知识库</small>
+                </div>
               </div>
+              <div class="popover-menu">
+                <button id="popoverPrivacyBtn">隐私与数据</button>
+                <button id="popoverApiBtn">模型与隐私设置</button>
+              </div>
+              <p class="popover-foot">回答仅用于信息理解与交流，不能替代医生诊断和治疗建议。</p>
             </div>
-            <div class="popover-menu">
-              <button id="popoverPrivacyBtn">隐私与数据</button>
-              <button id="popoverApiBtn">模型与隐私设置</button>
-            </div>
-            <p class="popover-foot">回答仅用于信息理解与交流，不能替代医生诊断和治疗建议。</p>
+          </div>
+          <div class="topbar-title">
+            <h2>UroPUC</h2>
+            <p id="topbarCaseLabel">可以帮你理解医学资料与相关信息</p>
           </div>
         </div>
       </header>
 
       <div class="chat-window" id="chatWindow">
-        <div class="dashboard" id="emptyState">
-          <div class="main-inner welcome">
-            <div class="welcome-msg">
-              <img class="message-avatar" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC AI 医生助手头像" />
-              <div class="message-column">
-                <div class="message-meta">UroPUC AI 医生助手</div>
-                <div class="message-bubble">
-                  你好，我是 UroPUC。你可以把检查、病理、病历或问题发给我，我会先帮你整理和解释。
-                </div>
-              </div>
-            </div>
-
-            <div class="quick-prompts">
-              <button data-prompt="帮我看懂这份检查结果：">帮我看懂检查结果</button>
-              <button data-prompt="帮我把这些病历资料整理成清晰的要点：">帮我整理病历资料</button>
-              <button data-prompt="请用通俗的语言解释这个医学术语：">解释一个医学术语</button>
-            </div>
-
-            <p class="welcome-safety">回答仅用于信息理解与交流，不能替代医生诊断和治疗建议。</p>
+        <div class="welcome-hero" id="emptyState">
+          <img class="hero-avatar" src="{{ url_for('static', filename='assets/mascot_fixed.png') }}" alt="UroPUC AI 医学助手头像" />
+          <h1 class="hero-title">你好，我是 UroPUC</h1>
+          <p class="hero-subtitle">你可以描述问题，或上传检查、病理、病历和影像资料，我会先帮你整理和解释。</p>
+          <div class="quick-prompts">
+            <button data-prompt="帮我看懂这份检查结果：">帮我看懂检查结果</button>
+            <button data-prompt="帮我把这些病历资料整理成清晰的要点：">帮我整理病历资料</button>
+            <button data-prompt="请用通俗的语言解释这个医学术语：">解释一个医学术语</button>
           </div>
+          <p class="welcome-safety">回答仅用于信息理解与交流，不能替代医生诊断和治疗建议。</p>
         </div>
         <div class="chat-thread" id="chatThread"></div>
       </div>
@@ -240,6 +232,6 @@
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=aidoctor1"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=hero2"></script>
 </body>
 </html>

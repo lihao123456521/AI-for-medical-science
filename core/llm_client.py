@@ -193,7 +193,7 @@ def _article_discussion_line(article: Dict[str, Any]) -> str:
 def _is_initial_or_analysis_question(question: str, mode: str = "") -> bool:
     return mode in {"initial_patient_analysis", "explicit_retrieval"}
 
-def local_fallback_reply(question: str, report: Dict[str, Any], mode: str = "") -> str:
+def local_fallback_reply(question: str, report: Dict[str, Any], mode: str = "", patient: Dict[str, Any] | None = None) -> str:
     if not _is_initial_or_analysis_question(question, mode):
         q = (question or "").strip()
         # Local mode should still give a useful answer instead of repeating a fixed failure sentence.
@@ -209,15 +209,32 @@ def local_fallback_reply(question: str, report: Dict[str, Any], mode: str = "") 
             return "当前为本地兜底模式，无法进行开放式 AI 推理。已收到你的问题：“" + q[:180] + "”。请配置并测试可用 API 后，系统会直接调用后台模型回答该问题；若这是病例分析问题，也可以补充病例摘要后重新发送。"
         return "当前为本地兜底模式。请输入病例或问题；如需开放式智能问答，请先配置可用 API。"
 
-    cases = report.get("similar_cases", [])[:4]
+    cases = report.get("similar_cases", [])[:3]
     treatment = report.get("treatment_outcomes") or {}
     rows = {r.get("case_id"): r for r in (treatment.get("similar_case_treatment_rows") or [])}
-    articles = [a for a in (report.get("related_articles") or []) if not a.get("low_confidence")][:4]
+    articles = [a for a in (report.get("related_articles") or []) if not a.get("low_confidence")][:3]
     missing = (report.get("risk") or {}).get("missing_items", [])
 
-    lines: List[str] = []
+    patient = patient or {}
+    age = str(patient.get("age") or "").strip()
+    if age.endswith(".0"):
+        age = age[:-2]
+    sex = str(patient.get("sex") or "").strip()
+    diagnosis = str(patient.get("diagnosis") or "").strip()
+    pathology = str(patient.get("pathology") or "").strip()
+    imaging = str(patient.get("imaging") or patient.get("imaging_findings") or "").strip()
+    symptoms = str(patient.get("symptoms") or "").strip()
+    demographics = "".join([f"{age}岁" if age else "", sex])
+    patient_points = [
+        demographics,
+        f"诊断/主要问题：{diagnosis}" if diagnosis else "",
+        f"病理：{pathology}" if pathology else "",
+        f"影像：{imaging}" if imaging else "",
+        f"症状：{symptoms}" if symptoms else "",
+    ]
+    lines: List[str] = ["当前病例要点：", "；".join(item for item in patient_points if item) or "当前已确认病例，但核心结构化资料仍较少。"]
     if cases:
-        lines.append("相似病例与治疗转归：")
+        lines.extend(["", "相似病例与治疗转归："])
         for c in cases:
             lines.append(_case_line(c, rows.get(c.get("case_id"), {})))
     else:
@@ -520,7 +537,7 @@ def ask_llm(
     if not base_url:
         base_url = defaults.get("base_url", "")
     if not api_key:
-        return {"provider": "local_fallback", "answer": _clean_answer_text(local_fallback_reply(question, report, mode_override))}
+        return {"provider": "local_fallback", "answer": _clean_answer_text(local_fallback_reply(question, report, mode_override, patient))}
 
     request_id = uuid.uuid4().hex
     policy = build_request_policy(provider, mode_override or "general")
@@ -692,7 +709,7 @@ def stream_ask_llm(
         base_url = defaults.get("base_url", "")
 
     if not api_key:
-        yield _clean_answer_text(local_fallback_reply(question, report, mode_override))
+        yield _clean_answer_text(local_fallback_reply(question, report, mode_override, patient))
         return
 
     policy = build_request_policy(provider, mode_override or "general")

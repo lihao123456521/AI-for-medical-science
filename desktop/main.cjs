@@ -10,6 +10,15 @@ const isDev = process.argv.includes('--dev') || !app.isPackaged;
 let mainWindow = null;
 let backend = null;
 
+function isSafeExternalUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -79,12 +88,17 @@ function createWindow(url) {
     mainWindow = null;
   });
 
+  mainWindow.webContents.session.setPermissionCheckHandler(() => false);
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+
   // 只允许加载本地后端地址；禁止跳转外部站点
   mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
     if (!isLocalBackendUrl(targetUrl)) event.preventDefault();
   });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url) && !isLocalBackendUrl(url)) {
+    if (isSafeExternalUrl(url)) {
       shell.openExternal(url);
     }
     return { action: 'deny' };

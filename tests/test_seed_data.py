@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.seed_data import audit_seed_payload, build_seed_payload, initialize_runtime_from_seed
+from core.seed_data import audit_seed_payload, build_seed_payload, initialize_runtime_from_seed, sanitize_for_external_llm
 
 
 class SeedDataTests(unittest.TestCase):
@@ -76,6 +76,60 @@ class SeedDataTests(unittest.TestCase):
 
         self.assertNotIn("影像片子汇总.pdf", text)
         self.assertNotIn("imaging-summary-617fbd6fbdd3.pdf", text)
+
+    def test_outbound_sanitizer_keeps_json_structure_and_clinical_fields(self):
+        """出站脱敏只替换身份值，不能把单行 JSON 上下文整段吞掉。"""
+        context = {
+            "conversation_mode": "initial_patient_brief",
+            "patient_input_current_chat_only": {
+                "age": 65,
+                "sex": "男",
+                "diagnosis": "尿道鳞状细胞癌",
+                "free_text": "姓名:张三；性别:男；住院号:12345678；诊断:尿道SCC",
+            },
+        }
+        text = json.dumps(context, ensure_ascii=False)
+        out = sanitize_for_external_llm(text)
+
+        self.assertIn("尿道鳞状细胞癌", out)
+        self.assertIn("尿道SCC", out)
+        self.assertIn("65", out)
+        self.assertNotIn("张三", out)
+        self.assertNotIn("12345678", out)
+        parsed = json.loads(out)
+        self.assertEqual(parsed["conversation_mode"], "initial_patient_brief")
+
+    def test_outbound_sanitizer_redacts_structured_json_identity_fields(self):
+        context = {
+            "patient_name": "张三",
+            "name": "李四",
+            "姓名": "王五",
+            "住院号": "H123456",
+            "病案号": "M123456",
+            "身份证号": "310101199001011234",
+            "联系电话": "13800138000",
+            "家庭住址": "上海市某区某路 1 号",
+            "age": 65,
+            "sex": "男",
+            "diagnosis": "尿道鳞状细胞癌",
+            "tnm": "T2N0M0",
+            "pathology": "鳞状细胞癌",
+            "imaging": "尿道占位",
+            "treatment": "手术",
+            "followup": "未见复发",
+            "history_messages": [
+                {"role": "user", "content": "请分析患者张三，住院号 H123456。"},
+            ],
+        }
+        out = sanitize_for_external_llm(json.dumps(context, ensure_ascii=False))
+        parsed = json.loads(out)
+
+        for key in ("patient_name", "name", "姓名", "住院号", "病案号", "身份证号", "联系电话", "家庭住址"):
+            self.assertNotEqual(parsed[key], context[key], key)
+        self.assertNotIn("张三", out)
+        self.assertNotIn("H123456", out)
+        for key in ("age", "sex", "diagnosis", "tnm", "pathology", "imaging", "treatment", "followup"):
+            self.assertEqual(parsed[key], context[key], key)
 
     def test_initialize_only_populates_empty_runtime(self):
         with tempfile.TemporaryDirectory() as tmp:

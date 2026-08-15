@@ -17,7 +17,8 @@ def build_evidence_report(
     knowledge_digest: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
     if route.retrieve_evidence:
-        report = generate_case_report(patient, top_n=4)
+        report = generate_case_report(patient, top_n=3)
+        report["similar_cases"] = list(report.get("similar_cases") or [])[:3]
         article_query = " ".join([
             question,
             str(patient.get("free_text") or ""),
@@ -32,8 +33,8 @@ def build_evidence_report(
             str(patient.get("sex") or ""),
             str(patient.get("diagnosis") or ""),
         ])
-        report["related_articles"] = search_articles(article_query, limit=4)
-        report["candidate_matches"] = find_candidates(attachments, candidate_query, limit=4)
+        report["related_articles"] = list(search_articles(article_query, limit=3) or [])[:3]
+        report["candidate_matches"] = list(find_candidates(attachments, candidate_query, limit=3) or [])[:3]
         report["knowledge_digest"] = knowledge_digest()
         report["display_evidence_cards"] = True
         return report

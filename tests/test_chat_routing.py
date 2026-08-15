@@ -82,18 +82,18 @@ class ChatRoutingTests(unittest.TestCase):
         self.assertFalse(has_detailed_case({"free_text": "你好"}))
         self.assertTrue(classify_chat_request("分析", True, "initial_patient_analysis").retrieve_evidence)
 
-    def test_initial_brief_keeps_case_context_without_retrieval(self):
+    def test_initial_brief_retrieves_case_and_article_evidence(self):
         route = classify_chat_request("请基于刚选择的患者做一份简短初步整理。", True, "initial_patient_brief")
 
         self.assertTrue(route.use_case_context)
-        self.assertFalse(route.retrieve_evidence)
-        self.assertFalse(route.use_article_context)
-        self.assertEqual(route.mode, "initial_patient_brief")
+        self.assertTrue(route.retrieve_evidence)
+        self.assertTrue(route.use_article_context)
+        self.assertEqual(route.mode, "initial_patient_analysis")
 
     def test_initial_brief_ignores_retrieval_trigger_words_in_question(self):
         route = classify_chat_request("请检索相似病例后做简短初步整理", True, "initial_patient_brief")
 
-        self.assertFalse(route.retrieve_evidence)
+        self.assertTrue(route.retrieve_evidence)
 
     def test_initial_brief_without_confirmed_case_falls_back_to_routing(self):
         route = classify_chat_request("请基于刚选择的患者做一份简短初步整理。", False, "initial_patient_brief")
@@ -107,6 +107,22 @@ class ChatRoutingTests(unittest.TestCase):
         answer = local_fallback_reply("手术是什么意思？", report, "general")
 
         self.assertNotIn("相似病例与治疗转归", answer)
+
+    def test_initial_local_fallback_starts_from_current_patient_and_caps_evidence(self):
+        report = {
+            "similar_cases": [{"case_id": f"CASE-{index}", "diagnosis": "尿道鳞癌"} for index in range(1, 5)],
+            "related_articles": [],
+            "risk": {"missing_items": ["TNM分期"]},
+        }
+        patient = {"age": "65", "sex": "男", "diagnosis": "尿道鳞癌", "pathology": "高分化鳞癌"}
+
+        answer = local_fallback_reply("初步分析", report, "initial_patient_analysis", patient)
+
+        self.assertTrue(answer.startswith("当前病例要点"))
+        self.assertIn("65岁", answer)
+        self.assertIn("高分化鳞癌", answer)
+        self.assertIn("CASE-3", answer)
+        self.assertNotIn("CASE-4", answer)
 
 
     def test_image_attachment_is_forwarded_even_for_general_route(self):

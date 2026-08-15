@@ -14,6 +14,7 @@ class DesktopElectronContractTests(unittest.TestCase):
     def test_package_json_defines_electron_shell_contract(self):
         pkg = json.loads(self.read("package.json"))
 
+        self.assertEqual(pkg["version"], "1.1.0")
         self.assertEqual(pkg["main"], "desktop/main.cjs")
         self.assertEqual(pkg["build"]["appId"], "edu.sjtu.uropuc")
         self.assertEqual(pkg["build"]["productName"], "UroPUC")
@@ -37,7 +38,22 @@ class DesktopElectronContractTests(unittest.TestCase):
         self.assertIn("electron-builder", dev_deps)
 
         lock = json.loads(self.read("package-lock.json"))
+        self.assertEqual(lock["version"], "1.1.0")
+        self.assertEqual(lock.get("packages", {}).get("", {}).get("version"), "1.1.0")
         self.assertIn("electron", lock.get("packages", {}).get("", {}).get("devDependencies", {}))
+
+    def test_case_label_editors_do_not_depend_on_window_prompt(self):
+        knowledge = self.read("static", "js", "knowledge.js")
+        label_body = knowledge.split("function editCaseLabel", 1)[1].split("async function deleteCase", 1)[0]
+        detail = self.read("templates", "case_detail.html")
+        detail_editor = detail.split("editLabelBtn.addEventListener", 1)[1].split("document.getElementById('deleteCaseBtn')", 1)[0]
+
+        self.assertNotIn("prompt(", label_body)
+        self.assertIn("createElement('input')", label_body)
+        self.assertIn("saveCaseLabel", label_body)
+        self.assertNotIn("prompt(", detail_editor)
+        self.assertIn("caseLabelInput", detail_editor)
+        self.assertIn("catch (err)", detail_editor)
 
     def test_main_process_security_and_lifecycle(self):
         source = self.read("desktop", "main.cjs")
@@ -49,7 +65,19 @@ class DesktopElectronContractTests(unittest.TestCase):
         self.assertIn("preload", source)
         self.assertIn("will-navigate", source)
         self.assertIn("setWindowOpenHandler", source)
+        self.assertIn("setPermissionRequestHandler", source)
+        self.assertIn("setPermissionCheckHandler", source)
+        self.assertIn("callback(false)", source)
+        self.assertIn("isSafeExternalUrl", source)
+        self.assertIn("parsed.protocol === 'https:'", source)
         self.assertIn("backend.stop()", source)
+
+    def test_flask_responses_define_a_content_security_policy(self):
+        source = self.read("app.py")
+
+        self.assertIn('response.headers["Content-Security-Policy"]', source)
+        self.assertIn("object-src 'none'", source)
+        self.assertIn("frame-ancestors 'none'", source)
 
     def test_backend_manager_contract(self):
         source = self.read("desktop", "backend-manager.cjs")
@@ -102,8 +130,11 @@ class DesktopElectronContractTests(unittest.TestCase):
 
         self.assertIn("UroPUCBackend.spec", source)
         self.assertIn("--distpath", source)
-        for private_name in ("api_config.json", ".env"):
+        for private_name in ("api_config.json", ".env", "chat_history.json"):
             self.assertIn(private_name, source)
+
+        release = self.read(".github", "workflows", "release.yml")
+        self.assertIn("chat_history.json", release)
 
     def test_release_workflow_builds_desktop_installer(self):
         source = self.read(".github", "workflows", "release.yml")
@@ -120,6 +151,18 @@ class DesktopElectronContractTests(unittest.TestCase):
         # 旧 C# launcher 发布链路暂不删除
         self.assertIn("build_release_packages.ps1", source)
         self.assertIn("UroPUC-windows.zip", source)
+
+    def test_tag_release_waits_for_full_python_and_javascript_tests(self):
+        source = self.read(".github", "workflows", "release.yml")
+        test_job = source.split("  test:", 1)[1].split("  release:", 1)[0]
+        release_job = source.split("  release:", 1)[1]
+
+        self.assertNotIn("!startsWith(github.ref, 'refs/tags/')", test_job)
+        self.assertIn("setup-node", test_job)
+        for js_file in ("static/js/app.js", "static/js/knowledge.js", "desktop/main.cjs"):
+            self.assertIn(f"node --check {js_file}", test_job)
+        self.assertIn("needs: test", release_job)
+        self.assertIn("v$packageVersion", release_job)
 
 
 if __name__ == "__main__":

@@ -533,6 +533,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .case-label-btn { border: 1px solid rgba(37, 99, 235, 0.25); background: #eef4ff; color: #1d4ed8; border-radius: 10px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
 .case-label-btn:hover { background: #dbeafe; }
 .case-group-label { color: #2563eb; }
+.case-label-editor { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.case-label-editor input { width: 150px; border: 1px solid #93c5fd; border-radius: 8px; padding: 6px 8px; font: inherit; background: #fff; color: #172033; }
+.case-label-save, .case-label-cancel { border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+.case-label-save { background: #2563eb; color: #fff; }
+.case-label-cancel { background: #e5e7eb; color: #374151; }
+.case-label-status { flex-basis: 100%; color: #b42318; }
+.detail-label-editor { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.detail-label-editor[hidden] { display: none; }
+.detail-label-editor input { width: 170px; border: 1px solid #93c5fd; border-radius: 10px; padding: 8px 10px; font: inherit; }
 
 /* 详情页 */
 .case-detail { max-width: 960px; margin: 0 auto; padding: 28px 22px 60px; }

@@ -31,7 +31,7 @@ from core.seed_data import initialize_runtime_from_seed
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
-APP_BUILD_ID = "2026.08.15-v40"
+APP_BUILD_ID = "2026.08.15-v41"
 DATA_PATH = Path(os.getenv("DATA_PATH", "data/knowledge_base.xlsx"))
 if not DATA_PATH.is_absolute():
     DATA_PATH = BASE_DIR / DATA_PATH
@@ -47,6 +47,8 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CANDIDATE_BATCH_DIR = PERSISTENT_DATA_DIR / "candidate_batches"
 CANDIDATE_BATCH_DIR.mkdir(parents=True, exist_ok=True)
 USER_CASES_PATH = PERSISTENT_DATA_DIR / "user_cases.json"
+CASE_LABEL_OVERRIDES_PATH = PERSISTENT_DATA_DIR / "case_label_overrides.json"
+CHAT_HISTORY_PATH = PERSISTENT_DATA_DIR / "chat_history.json"
 DELETED_CASES_PATH = PERSISTENT_DATA_DIR / "deleted_cases.json"
 ARTICLES_PATH = PERSISTENT_DATA_DIR / "articles.json"
 CASE_TAGS_PATH = PERSISTENT_DATA_DIR / "case_tags.json"
@@ -84,11 +86,30 @@ ARTICLE_EXTENSIONS = {".txt", ".docx", ".pdf", ".xlsx", ".xls", ".csv", ".md"}
 ALL_UPLOAD_EXTENSIONS = IMAGE_EXTENSIONS | CASE_TABLE_EXTENSIONS
 MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "50"))
 MAX_TEXT_CHARS_PER_FILE = int(os.getenv("MAX_TEXT_CHARS_PER_FILE", "500000"))
+MAX_CHAT_HISTORY_BYTES = int(os.getenv("MAX_CHAT_HISTORY_MB", "5")) * 1024 * 1024
 
 kb = KnowledgeBase(DATA_PATH)
 
 MAX_IMAGE_MB = int(os.getenv("MAX_IMAGE_MB", "20"))
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "").strip()
+
+
+def _has_valid_image_signature(path: Path, suffix: str) -> bool:
+    if suffix == ".dcm":
+        # DICOM files may legally omit the 128-byte preamble and DICM marker.
+        return True
+    with path.open("rb") as stream:
+        header = stream.read(16)
+    checks = {
+        ".png": header.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".jpg": header.startswith(b"\xff\xd8\xff"),
+        ".jpeg": header.startswith(b"\xff\xd8\xff"),
+        ".bmp": header.startswith(b"BM"),
+        ".tif": header.startswith((b"II*\x00", b"MM\x00*")),
+        ".tiff": header.startswith((b"II*\x00", b"MM\x00*")),
+        ".webp": len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP",
+    }
+    return checks.get(suffix, False)
 
 
 @app.before_request
@@ -293,6 +314,31 @@ def _apply_deleted_case_filter() -> None:
         kb.records = [r for r in kb.records if r.case_id not in deleted]
 
 
+def _load_case_label_overrides() -> Dict[str, str]:
+    """Excel 内置病例的标签覆盖：原始工作簿只读，重命名保存在独立 JSON。"""
+    try:
+        data = json.loads(CASE_LABEL_OVERRIDES_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {str(k): str(v) for k, v in data.items() if str(k).strip() and str(v).strip()}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_case_label_overrides(overrides: Dict[str, str]) -> None:
+    _atomic_write_json(CASE_LABEL_OVERRIDES_PATH, overrides)
+
+
+def _apply_case_label_overrides() -> None:
+    overrides = _load_case_label_overrides()
+    if not overrides:
+        return
+    for rec in kb.records:
+        label = overrides.get(rec.case_id)
+        if label:
+            rec.sheet = label
+
+
 
 def _knowledge_digest() -> Dict[str, Any]:
     """Small cached digest injected into normal AI answers.
@@ -398,6 +444,29 @@ def _atomic_write_json(path: Path, data: Any) -> None:
         except Exception:
             pass
     tmp.replace(path)
+
+
+def _normalize_chat_history(payload: Any) -> Dict[str, Any]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("chats"), list):
+        raise ValueError("聊天历史格式错误。")
+    chats: List[Dict[str, Any]] = []
+    for raw_chat in payload["chats"][:50]:
+        if not isinstance(raw_chat, dict):
+            continue
+        chat = _json_safe(raw_chat)
+        chat["messages"] = [
+            _json_safe(item) for item in (raw_chat.get("messages") or [])[-80:] if isinstance(item, dict)
+        ]
+        chat["attachments"] = [
+            _json_safe(item) for item in (raw_chat.get("attachments") or [])[-20:] if isinstance(item, dict)
+        ]
+        chat["patient"] = _json_safe(raw_chat.get("patient") or {}) if isinstance(raw_chat.get("patient") or {}, dict) else {}
+        chats.append(chat)
+    history = {"chats": chats, "activeId": str(payload.get("activeId") or "")[:200]}
+    encoded = json.dumps(history, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(encoded) > MAX_CHAT_HISTORY_BYTES:
+        raise ValueError(f"聊天历史超过 {MAX_CHAT_HISTORY_BYTES // 1024 // 1024}MB 限制。")
+    return history
 
 
 def _read_json_with_backup(path: Path, default: Any = None) -> Any:
@@ -746,6 +815,7 @@ def _write_storage_manifest() -> None:
         "article_count": article_count,
         "articles_deleted_marker": ARTICLES_DELETED_MARKER.exists(),
         "deleted_cases_path": str(DELETED_CASES_PATH),
+        "chat_history_path": str(CHAT_HISTORY_PATH),
         "uploads_path": str(UPLOAD_DIR),
         "persistence_repair_log_path": str(PERSISTENCE_REPAIR_LOG_PATH),
     })
@@ -1608,6 +1678,7 @@ if isinstance(_migration_state, dict) and _migration_state.get("public_seed_case
 _load_user_cases()
 _normalize_legacy_user_labels()
 _apply_deleted_case_filter()
+_apply_case_label_overrides()
 
 
 @app.after_request
@@ -1615,6 +1686,19 @@ def add_no_cache_headers(response):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
@@ -1850,6 +1934,10 @@ def api_upload_article():
     stored_name = f"{uuid.uuid4().hex}_{safe_stem}{suffix}"
     dest = UPLOAD_DIR / stored_name
     file.save(dest)
+
+    if dest.stat().st_size == 0:
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": "文件为空，请选择包含有效内容的文件。"}), 400
     text = _extract_article_text(dest)
     images = _extract_article_images(dest)
     saved_api = _load_saved_api_config()
@@ -2081,10 +2169,18 @@ def api_update_case_label(case_id):
     target = next((r for r in kb.records if r.case_id == case_id), None)
     if not target:
         return jsonify({"ok": False, "error": "未找到该病例。"}), 404
-    if not _is_user_case(target):
-        return jsonify({"ok": False, "error": "默认 Excel 数据库中的原始分组不建议修改；请仅修改用户新增的标签。"}), 400
+    # 用户投喂病例直接改记录并持久化；Excel 内置病例改内存分组，标签覆盖写入独立 JSON
     target.sheet = label
-    _save_user_cases()
+    if _is_user_case(target):
+        _save_user_cases()
+    else:
+        overrides = _load_case_label_overrides()
+        overrides[case_id] = label
+        _save_case_label_overrides(overrides)
+    try:
+        KB_DIGEST_PATH.unlink(missing_ok=True)
+    except Exception:
+        pass
     return jsonify({"ok": True, "case_id": case_id, "label": label, "message": "病例标签已更新。"})
 
 
@@ -2289,6 +2385,29 @@ def api_llm_test():
     status = 200 if result.get("ok") else 400
     return jsonify(result), status
 
+
+@app.get("/api/chat/history")
+def api_chat_history_get():
+    history = _read_json_with_backup(CHAT_HISTORY_PATH, {"chats": [], "activeId": ""})
+    try:
+        normalized = _normalize_chat_history(history)
+    except ValueError:
+        normalized = {"chats": [], "activeId": ""}
+    return jsonify({"ok": True, "history": normalized})
+
+
+@app.put("/api/chat/history")
+def api_chat_history_put():
+    if request.content_length and request.content_length > MAX_CHAT_HISTORY_BYTES + 64 * 1024:
+        return jsonify({"ok": False, "error": "聊天历史文件过大。"}), 413
+    payload = request.get_json(force=True, silent=True)
+    try:
+        history = _normalize_chat_history(payload)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    _atomic_write_json(CHAT_HISTORY_PATH, history)
+    return jsonify({"ok": True, "history": history, "message": "聊天历史已保存到本机运行目录。"})
+
 @app.post("/api/chat")
 def api_chat():
     payload = request.get_json(force=True, silent=True) or {}
@@ -2414,9 +2533,17 @@ def api_upload():
     dest = UPLOAD_DIR / stored_name
     file.save(dest)
 
+    if dest.stat().st_size == 0:
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": "文件为空，请选择包含有效内容的文件。"}), 400
+
     if suffix in IMAGE_EXTENSIONS and dest.stat().st_size > MAX_IMAGE_MB * 1024 * 1024:
         dest.unlink(missing_ok=True)
         return jsonify({"ok": False, "error": f"图片过大：单张图片不能超过 {MAX_IMAGE_MB}MB。"}), 413
+
+    if suffix in IMAGE_EXTENSIONS and not _has_valid_image_signature(dest, suffix):
+        dest.unlink(missing_ok=True)
+        return jsonify({"ok": False, "error": "图片文件损坏，或扩展名与实际格式不一致。"}), 400
 
     response = {
         "ok": True,
@@ -2430,8 +2557,12 @@ def api_upload():
     }
 
     if suffix in CASE_TABLE_EXTENSIONS:
-        parsed = parse_case_file(dest)
-        candidates = _extract_case_batch_candidates(dest, original_name) if suffix in CASE_TABLE_EXTENSIONS else []
+        try:
+            parsed = parse_case_file(dest)
+            candidates = _extract_case_batch_candidates(dest, original_name)
+        except Exception:
+            dest.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": "文件损坏或无法解析，请检查文件后重试。"}), 400
         if candidates:
             batch_id = candidates[0].get("batch_id")
             response.update({
@@ -2444,7 +2575,8 @@ def api_upload():
                 "note": f"已读取病例数据表，共识别 {len(candidates)} 条候选病例。系统已生成候选病例确认卡片，医生可直接选择；也可继续输入年龄、姓名、诊断、病理或住院号等线索后再匹配。",
             })
         elif not parsed.get("ok"):
-            response.update({"type": "case_file", "parse_ok": False, "note": parsed.get("error", "病例表格解析失败。"), "fields": {}})
+            dest.unlink(missing_ok=True)
+            return jsonify({"ok": False, "error": parsed.get("error", "病例文件解析失败。")}), 400
         else:
             response.update({
                 "type": "case_file",
@@ -2496,6 +2628,8 @@ def api_export():
         ("user_cases.json", USER_CASES_PATH),
         ("articles.json", ARTICLES_PATH),
         ("case_tags.json", CASE_TAGS_PATH),
+        ("case_label_overrides.json", CASE_LABEL_OVERRIDES_PATH),
+        ("chat_history.json", CHAT_HISTORY_PATH),
         ("deleted_cases.json", DELETED_CASES_PATH),
         ("migration_state.json", MIGRATION_STATE_PATH),
     ]

@@ -13,6 +13,7 @@ dist/desktop/
 node_modules/
 .electron-cache/
 .electron-builder-cache/
+packaging/electron-builder.local.json
 
 # Runtime data and uploads may contain sensitive medical information.
 uploads/*

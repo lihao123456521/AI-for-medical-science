@@ -89,16 +89,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .brand-block h1 { font-size: 17px; margin: 0; color: #fff; }
 .brand-block p { font-size: 12px; color: #94a3b8; margin: 2px 0 0; line-height: 1.35; }
 
-/* 侧栏导航：工作台 / 数据 / 研究工具 分组，设置项沉底 */
-.side-nav { display: flex; flex-direction: column; gap: 14px; }
-.nav-section { display: flex; flex-direction: column; gap: 4px; }
+/* 侧栏导航：开始使用 / 资料 / 专业工具 分组，每个功能组做成独立深色面板 */
+.side-nav { display: flex; flex-direction: column; gap: 12px; }
+.nav-section {
+  display: flex; flex-direction: column; gap: 4px;
+  background: #142238;
+  border: 1px solid #23344c;
+  border-radius: 12px;
+  padding: 8px;
+}
 .nav-section-title {
   font-size: 11px; font-weight: 600; letter-spacing: 1px;
-  color: #64748b; text-transform: uppercase; padding: 0 8px 4px;
+  color: #8fa1b8; text-transform: uppercase; padding: 0 8px 4px;
 }
 .nav-item {
   display: flex; align-items: center; gap: 8px;
-  width: 100%; border: 0; border-radius: 10px;
+  width: 100%; border: 0; border-radius: 8px;
   color: var(--sidebar-text); background: transparent;
   padding: 9px 10px; cursor: pointer; text-align: left;
   font-size: 13.5px; font-weight: 500; text-decoration: none;
@@ -115,14 +121,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .nav-item-primary:hover { background: var(--primary-strong); color: #fff; }
 
 .side-footer {
-  margin-top: auto; padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: auto;
   display: flex; flex-direction: column; gap: 4px;
+  background: #142238;
+  border: 1px solid #23344c;
+  border-radius: 12px;
+  padding: 8px;
 }
 
 .panel-title { font-size: 13px; color: #cbd5e1; margin: 4px 0 8px; }
 
-.history-panel { display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1; }
+.history-panel {
+  display: flex; flex-direction: column; gap: 8px; min-height: 0; flex: 1;
+  background: #142238;
+  border: 1px solid #23344c;
+  border-radius: 12px;
+  padding: 8px;
+}
 .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow: auto; padding-right: 2px; }
 
 .history-item-wrap {
@@ -166,22 +181,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .chip-success { color: var(--success); background: var(--success-soft); border-color: #bbf7d0; }
 .chip-model { color: var(--primary); background: var(--primary-soft); border-color: #bfdbfe; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.chip-btn { cursor: pointer; font: inherit; transition: border-color 0.15s ease, color 0.15s ease; }
+.chip-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 .chat-window { flex: 1; overflow-y: auto; padding: 24px 24px; scroll-behavior: smooth; }
 
 /* 聊天线程：中央有限宽度，避免宽屏横向摊开 */
 .chat-thread { max-width: var(--content-chat); margin: 0 auto; width: 100%; }
 
-/* ---------- 首页 Dashboard（空状态升级为科研工作台） ---------- */
+/* ---------- 首页空状态：简洁欢迎页，第一视觉中心是对话 ---------- */
 .dashboard { display: block; }
 .main-inner { max-width: var(--content-wide); margin: 0 auto; width: 100%; }
+.main-inner.welcome { max-width: 760px; padding-top: 6vh; }
 
 .dash-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 24px; padding: 8px 0 24px;
+  gap: 24px; padding: 8px 0 20px;
 }
 .dash-head h3 { font-size: 26px; font-weight: 700; margin: 0; color: var(--text); line-height: 1.35; }
-.dash-head p { font-size: 14px; color: var(--muted); margin: 6px 0 0; }
+.dash-head p { font-size: 14px; color: var(--muted); margin: 6px 0 0; line-height: 1.7; }
 
 .empty-mascot {
   width: 56px; height: 56px; border-radius: 14px; flex: 0 0 auto;
@@ -190,54 +208,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .empty-mascot img { width: 52px; height: 52px; object-fit: cover; border-radius: inherit; }
 
-/* 统计卡：小而克制，不做大号彩色 KPI */
-.dash-stats {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
-}
-.stat-card {
-  display: flex; flex-direction: column; gap: 2px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px 16px;
-  text-decoration: none; transition: border-color 0.15s ease;
-}
-.stat-card:hover { border-color: var(--primary); }
-.stat-card b { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.2; }
-.stat-card span { font-size: 12.5px; color: var(--muted); }
-.stat-imaging b { color: var(--medical); }
-.stat-imaging:hover { border-color: var(--medical); background: var(--medical-soft); }
-
-.dash-section { margin-top: 24px; }
-.dash-section-title { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
-
-/* 常用任务卡：2×2 一级功能入口 */
-.task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.task-card {
-  display: flex; flex-direction: column; gap: 4px; text-align: left;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px 16px;
-  cursor: pointer; font: inherit; text-decoration: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-.task-card:hover { border-color: var(--primary); background: var(--primary-soft); }
-.task-card b { font-size: 14.5px; font-weight: 700; color: var(--text); }
-.task-card small { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-.task-imaging:hover { border-color: var(--medical); background: var(--medical-soft); }
-.task-imaging b { color: var(--medical); }
-
-/* AI 病例讨论入口：Prompt 快捷方式下沉到模块内部 */
-.dash-ai {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px 20px 20px;
-}
-.dash-ai .dash-section-title { margin-bottom: 4px; }
-.dash-ai p { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
-
 .quick-prompts { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; }
 .quick-prompts button {
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text-soft);
   border-radius: 10px; padding: 8px 14px; font-size: 13px; transition: all 0.15s ease;
 }
 .quick-prompts button:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+
+.welcome-safety { font-size: 12.5px; color: var(--muted); margin: 18px 0 0; }
+
+/* 隐私与数据弹层 */
+.privacy-list { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
+.privacy-item {
+  display: flex; flex-direction: column; gap: 3px; margin: 0;
+  padding: 10px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.privacy-item b { font-size: 13px; color: var(--text); }
+.privacy-item span { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 
 /* 消息气泡 */
 .message-row { display: flex; margin: 12px 0; }
@@ -607,8 +595,6 @@ body.modal-open { overflow: hidden; }
   .composer-context .ctx-success { display: none; }
   .message-bubble { max-width: 94%; }
   .dash-head h3 { font-size: 20px; }
-  .dash-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .task-grid { grid-template-columns: 1fr; }
   .dash-head { padding-top: 0; }
 
   .case-grid, .add-grid, .article-list-page, .article-grid,
@@ -627,6 +613,5 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 480px) {
   .medical-image-gallery { grid-template-columns: 1fr; }
   .quick-prompts { flex-direction: column; align-items: stretch; }
-  .dash-stats { grid-template-columns: 1fr; }
   .dash-head .empty-mascot { display: none; }
 }

@@ -44,13 +44,18 @@ const els = {
   sendBtn: document.getElementById('sendBtn'),
   newChatBtn: document.getElementById('newChatBtn'),
   addCurrentCaseBtn: document.getElementById('addCurrentCaseBtn'),
+  uploadMaterialsBtn: document.getElementById('uploadMaterialsBtn'),
   fileInput: document.getElementById('fileInput'),
   uploadStatus: document.getElementById('uploadStatus'),
   kbSummary: document.getElementById('kbSummary'),
   mobileMenuBtn: document.getElementById('mobileMenuBtn'),
   topbarCaseLabel: document.getElementById('topbarCaseLabel'),
-  chipModel: document.getElementById('chipModel'),
-  chipImagePolicy: document.getElementById('chipImagePolicy'),
+  privacyChipBtn: document.getElementById('privacyChipBtn'),
+  privacyModal: document.getElementById('privacyModal'),
+  closePrivacyModal: document.getElementById('closePrivacyModal'),
+  privacyOpenApi: document.getElementById('privacyOpenApi'),
+  privacyModelText: document.getElementById('privacyModelText'),
+  privacyImageText: document.getElementById('privacyImageText'),
   caseChoiceModal: document.getElementById('caseChoiceModal'),
   caseChoiceTitle: document.getElementById('caseChoiceTitle'),
   caseChoiceTip: document.getElementById('caseChoiceTip'),
@@ -59,11 +64,6 @@ const els = {
   closeCaseChoice: document.getElementById('closeCaseChoice'),
   ctxCase: document.getElementById('ctxCase'),
   ctxAttachments: document.getElementById('ctxAttachments'),
-  statCases: document.getElementById('statCases'),
-  statArticles: document.getElementById('statArticles'),
-  statImages: document.getElementById('statImages'),
-  statUserCases: document.getElementById('statUserCases'),
-  taskUploadImaging: document.getElementById('taskUploadImaging'),
   apiKeyBtn: document.getElementById('apiKeyBtn'),
   apiModal: document.getElementById('apiModal'),
   closeApiModal: document.getElementById('closeApiModal'),
@@ -136,7 +136,7 @@ function renderAssistantText(text) {
 
 function currentChat() { return state.chats.find(c => c.id === state.activeId) || state.chats[0] || createChat(true); }
 function createChat(activate = true) {
-  const chat = { id: uid(), title: '新的病例对话', createdAt: Date.now(), updatedAt: Date.now(), patient: {}, caseConfirmed: false, attachments: [], messages: [] };
+  const chat = { id: uid(), title: '新的对话', createdAt: Date.now(), updatedAt: Date.now(), patient: {}, caseConfirmed: false, attachments: [], messages: [] };
   state.chats.unshift(chat);
   if (activate) state.activeId = chat.id;
   saveChats(); renderHistory(); renderChat();
@@ -160,7 +160,7 @@ function loadChats() {
 function deleteChat(id) {
   const chat = state.chats.find(c => c.id === id);
   if (!chat) return;
-  if (!confirm(`删除聊天记录：${chat.title || '病例对话'}？`)) return;
+  if (!confirm(`删除聊天记录：${chat.title || '对话'}？`)) return;
   state.chats = state.chats.filter(c => c.id !== id);
   if (state.activeId === id) state.activeId = state.chats[0]?.id || null;
   if (!state.chats.length) createChat(true);
@@ -219,8 +219,8 @@ function inferPatientTitle(text, patient = {}) {
   const treatment = pickFirstMatch(raw, [/(尿道切除|阴茎部分切除|阴茎全切|根治性切除|膀胱造瘘|放疗|化疗|免疫治疗|淋巴结清扫)/]);
   if (treatment) uniquePush(parts, treatment, 10);
 
-  if (parts.length) return parts.slice(0, 8).join('｜');
-  return raw ? raw.slice(0, 28) + (raw.length > 28 ? '…' : '') : '未命名病例讨论';
+  if (parts.length) return parts.slice(0, 3).join('｜');
+  return raw ? raw.slice(0, 28) + (raw.length > 28 ? '…' : '') : '新的对话';
 }
 function refreshChatTitle(chat) {
   const userText = (chat.messages || []).filter(m => m.role === 'user').map(m => m.content).join(' ');
@@ -234,7 +234,7 @@ function renderHistory() {
     item.className = 'history-item-wrap' + (chat.id === state.activeId ? ' active' : '');
     const title = document.createElement('button');
     title.className = 'history-item';
-    title.textContent = chat.title || '病例对话';
+    title.textContent = chat.title || '对话';
     title.onclick = () => setActiveChat(chat.id);
     const del = document.createElement('button');
     del.className = 'history-delete';
@@ -263,7 +263,13 @@ function updateWorkspaceContext() {
   const chat = currentChat();
   const hasCase = Boolean(chat.caseConfirmed) || Object.keys(chat.patient || {}).length > 0;
   const caseLabel = hasCase ? (chat.title || '当前病例') : '未选择';
-  if (els.topbarCaseLabel) els.topbarCaseLabel.textContent = hasCase ? `当前病例：${caseLabel}` : '未选择病例';
+  const attachmentCount = (chat.attachments || []).length;
+  // 顶部副标题：无资料时保持中性说明；有资料时展示资料数或当前主题
+  if (els.topbarCaseLabel) {
+    if (hasCase) els.topbarCaseLabel.textContent = `当前主题：${caseLabel}`;
+    else if (attachmentCount) els.topbarCaseLabel.textContent = `已添加 ${attachmentCount} 份资料`;
+    else els.topbarCaseLabel.textContent = '可以帮你理解医学资料与相关信息';
+  }
   if (els.ctxCase) els.ctxCase.textContent = `当前病例：${caseLabel}`;
   const count = (chat.attachments || []).length;
   if (els.ctxAttachments) {
@@ -272,21 +278,15 @@ function updateWorkspaceContext() {
   }
 }
 function updateModelChip() {
-  if (!els.chipModel) return;
   const cfg = rememberedApiConfig || (rememberedApiHistory || [])[0];
-  els.chipModel.textContent = cfg?.model ? cfg.model : (cfg?.provider ? `${cfg.provider} / 未选模型` : '本地知识库');
-  els.chipModel.title = cfg?.provider ? `当前模型：${cfg.provider} / ${cfg.model || '未选模型'}` : '未配置 API Key 时使用本地知识库兜底回答';
-  if (els.chipImagePolicy) {
+  if (els.privacyModelText) {
+    els.privacyModelText.textContent = cfg?.model ? `${cfg.provider || '已配置'} / ${cfg.model}` : (cfg?.provider ? `${cfg.provider} / 未选模型` : '本地知识库（未配置 API Key 时使用本地知识库兜底回答）');
+  }
+  if (els.privacyImageText) {
     if (cfg?.provider) {
-      els.chipImagePolicy.textContent = `图片将发送至 ${cfg.provider}`;
-      els.chipImagePolicy.title = '配置了第三方模型 API Key 后，讨论中携带的图片会作为多模态输入发送给该模型；未配置时图片仅在本地处理';
-      els.chipImagePolicy.classList.add('chip-warn');
-      els.chipImagePolicy.classList.remove('chip-success');
+      els.privacyImageText.textContent = `图片将发送至 ${cfg.provider}。配置了第三方模型后，讨论中携带的图片会作为多模态输入发送给该模型；未配置时图片仅在本地处理。`;
     } else {
-      els.chipImagePolicy.textContent = '图片仅本机处理';
-      els.chipImagePolicy.title = '未配置 API Key 时，上传图片只保存在本机，不发送给任何第三方服务';
-      els.chipImagePolicy.classList.remove('chip-warn');
-      els.chipImagePolicy.classList.add('chip-success');
+      els.privacyImageText.textContent = '图片仅本机处理。未配置 API Key 时，上传图片只保存在本机，不发送给任何第三方服务。';
     }
   }
 }
@@ -666,7 +666,7 @@ async function addCurrentCase() {
   const res = await fetch('/api/add_case', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fields: { ...(chat.patient || {}), medical_images: (chat.attachments || []).filter(a => a.type === 'image') }, source_text: text }) });
   const data = await res.json();
   if (!res.ok || !data.ok) { addMessage('assistant', `添加失败：${data.error || '未知错误'}`); return; }
-  addMessage('assistant', `${data.message}\n可在左侧“病例知识库”中查看。`);
+  addMessage('assistant', `${data.message}\n可在左侧“病例资料库”中查看。`);
   loadSummary();
 }
 async function loadSummary() {
@@ -674,14 +674,7 @@ async function loadSummary() {
     const res = await fetch('/api/summary'); const data = await res.json();
     const groups = Object.entries(data.sheets || {}).map(([k,v]) => `${k} ${v}`).join('｜');
     els.kbSummary.innerHTML = `病例总数：${escapeHtml(data.total_cases)}｜文章 ${escapeHtml(data.articles || 0)}<br>${escapeHtml(groups || '暂无分组')}`;
-    if (els.statCases) els.statCases.textContent = data.total_cases ?? '—';
-    if (els.statArticles) els.statArticles.textContent = data.articles ?? '—';
   } catch (_) { els.kbSummary.textContent = '知识库读取失败'; }
-  try {
-    const res = await fetch('/api/storage/status', {cache:'no-store'}); const data = await res.json();
-    if (els.statImages) els.statImages.textContent = data.upload_images ?? data.upload_files ?? '—';
-    if (els.statUserCases) els.statUserCases.textContent = data.user_cases ?? '—';
-  } catch (_) {}
 }
 
 const API_PROVIDER_CONFIG = {
@@ -1037,7 +1030,11 @@ els.newChatBtn.addEventListener('click', () => {
   els.input.focus();
 });
 els.addCurrentCaseBtn.addEventListener('click', addCurrentCase);
-els.taskUploadImaging?.addEventListener('click', () => els.fileInput.click());
+els.uploadMaterialsBtn?.addEventListener('click', () => els.fileInput.click());
+els.privacyChipBtn?.addEventListener('click', () => { els.privacyModal.hidden = false; });
+els.closePrivacyModal?.addEventListener('click', () => { els.privacyModal.hidden = true; });
+els.privacyModal?.addEventListener('click', e => { if (e.target === els.privacyModal) els.privacyModal.hidden = true; });
+els.privacyOpenApi?.addEventListener('click', () => { els.privacyModal.hidden = true; openApiModal(); });
 els.choiceMergeCase?.addEventListener('click', () => resolveCaseChoice('merge'));
 els.choiceNewCase?.addEventListener('click', () => resolveCaseChoice('new'));
 els.closeCaseChoice?.addEventListener('click', () => resolveCaseChoice('cancel'));

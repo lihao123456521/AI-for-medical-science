@@ -178,10 +178,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   border-bottom: 1px solid var(--border);
 }
 .mobile-menu { display: none; border: 0; background: var(--surface-2); border-radius: 10px; width: 40px; height: 40px; font-size: 18px; }
-.topbar-title { min-width: 0; margin-right: auto; }
+/* 顶部：AI 头像 + UroPUC 标题组成左侧助手区，右侧保持干净 */
+.topbar-assistant { display: flex; align-items: center; gap: 12px; min-width: 0; margin-right: auto; }
+.topbar-title { min-width: 0; }
 .topbar h2 { font-size: 17px; font-weight: 700; margin: 0; color: var(--text); line-height: 1.3; }
 .topbar p { font-size: 12.5px; margin: 1px 0 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 顶部右侧：AI 医生头像 + 轻量 Popover（隐私与数据、模型设置入口收纳于此） */
+/* AI 头像 + 轻量 Popover（隐私与数据、模型设置入口收纳于此）；头像在左侧，Popover 左对齐避免遮出窗口 */
 .topbar-avatar { position: relative; display: flex; align-items: center; }
 .avatar-btn {
   position: relative; width: 38px; height: 38px; padding: 0;
@@ -196,7 +198,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   border-radius: 50%; background: var(--success); border: 2px solid var(--surface);
 }
 .avatar-popover {
-  position: absolute; top: calc(100% + 10px); right: 0; z-index: 60;
+  position: absolute; top: calc(100% + 10px); left: 0; z-index: 60;
   width: 280px; padding: 12px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; box-shadow: var(--shadow-lg);
@@ -225,30 +227,31 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .chip-btn { cursor: pointer; font: inherit; transition: border-color 0.15s ease, color 0.15s ease; }
 .chip-btn:hover { border-color: var(--primary); color: var(--primary); }
 
-.chat-window { flex: 1; overflow-y: auto; padding: 24px 24px; scroll-behavior: smooth; }
+.chat-window { flex: 1; overflow-y: auto; padding: 20px 32px 24px; scroll-behavior: smooth; }
 
-/* 聊天线程：中央有限宽度，避免宽屏横向摊开 */
-.chat-thread { max-width: var(--content-chat); margin: 0 auto; width: 100%; }
+/* 聊天线程：占满 Sidebar 右侧主内容区，AI 从左上方开始输出，不再居中悬浮 */
+.chat-thread { width: 100%; max-width: none; margin: 0; }
 
-/* ---------- 首页空状态：简洁欢迎页，第一视觉中心是对话 ---------- */
+/* ---------- 首页空状态：中央 AI 人像 + 标题 + 问题模板（未开始交互前不显示聊天气泡） ---------- */
 .dashboard { display: block; }
 .main-inner { max-width: var(--content-wide); margin: 0 auto; width: 100%; }
-.main-inner.welcome { max-width: 760px; padding-top: 6vh; }
 
-/* 首屏欢迎：一条左侧带头像的 AI 医生欢迎消息，建立对话模型 */
-.welcome-msg {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 8px 0 4px;
+.welcome-hero {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; min-height: 52vh; padding: 4vh 24px 32px;
 }
-.welcome-msg .message-meta { margin-bottom: 4px; }
-.welcome-msg .message-bubble {
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--border); border-bottom-left-radius: 6px;
-  box-shadow: var(--shadow-sm);
-  font-size: 15.5px; line-height: 1.75;
+.hero-avatar {
+  width: 96px; height: 96px; border-radius: 50%; object-fit: cover;
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+  background: var(--surface); margin-bottom: 14px;
 }
-.welcome .quick-prompts { margin: 16px 0 0 46px; }
-.welcome .welcome-safety { margin-left: 46px; }
+.hero-title { font-size: 26px; font-weight: 700; color: var(--text); margin: 0 0 8px; }
+.hero-subtitle {
+  font-size: 15px; color: var(--muted); line-height: 1.75;
+  max-width: 540px; margin: 0 0 20px;
+}
+.welcome-hero .quick-prompts { justify-content: center; margin: 0; }
+.welcome-hero .welcome-safety { margin: 14px 0 0; }
 
 .quick-prompts { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; }
 .quick-prompts button {
@@ -346,8 +349,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .candidate-confirm-btn:hover { filter: brightness(0.97); }
 
 /* 输入区：与页面背景一致，仅输入框为白色卡片，避免底部出现另一色带 */
-.composer-wrap { padding: 12px 24px 18px; background: var(--bg); }
-.composer-inner { max-width: var(--content-chat); margin: 0 auto; width: 100%; }
+.composer-wrap { padding: 12px 32px 18px; background: var(--bg); }
+.composer-inner { max-width: none; margin: 0; width: 100%; }
 .upload-status-inline { font-size: 12px; color: var(--muted); min-height: 18px; margin-bottom: 6px; }
 .composer {
   display: flex; align-items: flex-end; gap: 10px;
@@ -630,7 +633,6 @@ body.modal-open { overflow: hidden; }
 /* 中屏（861–1366px）：内容适度收紧，两侧留白增长而不是无限拉宽 */
 @media (max-width: 1366px) {
   .main-inner { max-width: 1080px; }
-  .chat-thread, .composer-inner { max-width: 900px; }
 }
 
 @media (max-width: 860px) {
@@ -641,12 +643,15 @@ body.modal-open { overflow: hidden; }
   }
   .sidebar.open { transform: translateX(0); }
   .mobile-menu { display: grid; place-items: center; }
-  .topbar { padding: 8px 14px; }
+  .topbar { padding: 8px 14px; gap: 10px; }
+  .topbar-assistant { gap: 10px; }
   .topbar h2 { font-size: 16px; }
   .chat-window { padding: 16px 12px; }
   .composer-wrap { padding: 10px 12px 14px; }
   .message-column, .message-row.user .message-column { max-width: 88%; }
-  .welcome .quick-prompts, .welcome .welcome-safety { margin-left: 0; }
+  .welcome-hero { min-height: 46vh; padding-top: 2vh; }
+  .hero-avatar { width: 84px; height: 84px; }
+  .hero-title { font-size: 22px; }
 
   .case-grid, .add-grid, .article-list-page, .article-grid,
   .article-search-tools, .article-search-row, .kb-tools, .kb-tools-with-danger,
@@ -664,5 +669,6 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 480px) {
   .medical-image-gallery { grid-template-columns: 1fr; }
   .quick-prompts { flex-direction: column; align-items: stretch; }
-  .welcome .quick-prompts { margin-left: 0; }
+  .hero-subtitle { font-size: 14px; }
+  .avatar-popover { width: min(280px, calc(100vw - 40px)); }
 }

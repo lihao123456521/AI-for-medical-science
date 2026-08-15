@@ -241,7 +241,11 @@ function renderHistory() {
 function renderChat() {
   const chat = currentChat();
   els.chatThread.innerHTML = '';
-  if (!chat.messages.length) {
+  // 欢迎态只在完全未开始交互时显示：没有消息、没有上传资料、也没有选择病例
+  const showWelcome = !chat.messages.length
+    && !(chat.attachments || []).length
+    && !Object.keys(chat.patient || {}).length;
+  if (showWelcome) {
     els.emptyState.style.display = '';
     els.chatThread.style.display = 'none';
     updateWorkspaceContext();
@@ -293,11 +297,11 @@ function renderMessage(msg) {
     const avatar = document.createElement('img');
     avatar.className = 'message-avatar';
     avatar.src = DOCTOR_AVATAR_URL;
-    avatar.alt = 'UroPUC AI 医生助手头像';
+    avatar.alt = 'UroPUC AI 医学助手头像';
     row.appendChild(avatar);
     const meta = document.createElement('div');
     meta.className = 'message-meta';
-    meta.textContent = 'UroPUC AI 医生助手';
+    meta.textContent = 'UroPUC AI 医学助手';
     column.appendChild(meta);
   }
   const bubble = document.createElement('div');
